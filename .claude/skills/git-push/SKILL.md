@@ -569,6 +569,7 @@ In both cases, append the `Closes` lines when applicable (sourced from Step 2c /
 - Always append `Closes #<plan-issue-number>` if it was captured.
 - Also append `Closes #<master-issue-number>` if `<master-issue-number>` was captured AND `<is-final-phase>=true`. This closes the umbrella issue when the final phase merges.
 - If neither was captured (Step 2d "Skip" path), append nothing and include a note in the final report that the PR has no linked issue.
+- **Never put a closing keyword before an issue reference anywhere else in the body.** GitHub closes `#N` for `close`/`closes`/`closed`/`fix`/`fixes`/`fixed`/`resolve`/`resolves`/`resolved` followed by `#N`, even inside a negation ("so it does not close #39" closed an umbrella issue with five phases left). In prose write "umbrella #39" or "Part of #39". The check under "Closing references (script)" below enforces this.
 
 **Default structure (only when the repo has no PR template):**
 
@@ -617,6 +618,16 @@ The script checks every name against the repo's real label and milestone sets BE
 Judgment the model keeps:
 - **Labels:** base them on **all changes on the branch** (the full `origin/<default-branch>...HEAD` diff, not just the latest push); add **all labels that apply**. Map the changed paths using the repo's **own module layout**, not a hardcoded `backend/`/`frontend/`: server-side code → a backend/server label; JS/HTML/CSS → a frontend label; migrations/model changes → a database label; test files → a testing label; Docker/CI/build config → an infrastructure label; docs → a documentation label; plus intent labels (`bug`/`enhancement`) inferred from the branch, commits and PR context. Only labels that exist in the repo's set are accepted, so list them first with `GH_TOKEN=$(<token-generator>) gh label list --repo <Repo slug>` if unsure.
 - **Milestone:** choose **one**, by the nature and motivation of all changes on the branch: a bug fix or broken-behavior correction → a bug/maintenance milestone; new features, enhancements, refactors and architectural improvements → a feature/roadmap milestone. Use commit messages, branch name and PR context. If the repo declares no milestones, omit `--milestone` and note it in the final report.
+
+#### Closing references (script)
+
+After creating or updating the PR, verify GitHub's own parse of the body, from `~/code` or the sub-repo cwd:
+
+```bash
+~/code/.claude/scripts/pr-closing-check.sh <repo-dir> <PR_NUMBER> --expect <plan-issue-number>[,<master-issue-number>] --fix
+```
+
+`--expect` lists exactly the issues this PR should close: `<plan-issue-number>`, plus `<master-issue-number>` only when `<is-final-phase>=true`, or `none` when no `Closes` line was added. The script compares the PR's `closingIssuesReferences` with that set; for an unexpected issue it rewrites the closing keyword in the body to `reference` and re-checks. Exit 0 = exact match. Exit 1 = still wrong (a `MISSING` line means the `Closes` line was not written: fix the body and rerun; an unfixable `UNEXPECTED` is linked by hand or by a commit message: report it, never merge). Exit 4 = could not check: STOP and report.
 
 #### After PR Creation
 
