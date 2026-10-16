@@ -1,0 +1,23 @@
+.DS_Store
+*.bak
+__pycache__/
+
+# Per-machine generated Claude settings (absolute paths for one host); never tracked.
+.claude/settings.local.json
+
+# Playwright MCP scratch output.
+.playwright-mcp/
+
+# Sub-repos: each project lives in its own repo nested here. Add one line per project, anchored
+# with a leading slash so it does not shadow plans/<project>/ folders of the same name.
+# /my-project/
+
+# Worktrees created for a branch live under each sub-repo; a stronghold-level one lands here.
+/.claude/worktrees/
+
+# Transient plan artifacts.
+plans/**/screenshots/
+plans/**/mocks/*.png
+plans/**/mockup/*.png
+plans/**/mockups/*.png
+plans/**/tmp/

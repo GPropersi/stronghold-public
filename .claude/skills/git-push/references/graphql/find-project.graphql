@@ -1,0 +1,10 @@
+query($login: String!) {
+  organization(login: $login) {
+    projectsV2(first: 50) {
+      nodes {
+        id
+        title
+      }
+    }
+  }
+}

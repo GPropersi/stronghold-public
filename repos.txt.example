@@ -1,0 +1,8 @@
+# Clone manifest for your sub-repos. Copy to repos.txt and fill in.
+#
+# Format: <dir-name>  <clone-url>  <default-branch>
+# To restore on a fresh machine: for each line, run
+#   git clone <clone-url> <stronghold>/<dir-name>
+
+my-project-a   git@github.com:OWNER/my-project-a.git   main
+my-project-b   git@github.com:OWNER/my-project-b.git   main

@@ -1,0 +1,15 @@
+query($projectId: ID!) {
+  node(id: $projectId) {
+    ... on ProjectV2 {
+      field(name: "Status") {
+        ... on ProjectV2SingleSelectField {
+          id
+          options {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+}
