@@ -21,6 +21,9 @@ Commands (<repo> is a sub-repo DIRECTORY name or `stronghold`, mapped to a bucke
   review-topic <repo> <name>            ensure plans/<bucket>/completed/<name>/{reviews,tmp} exists for a plan-less push
                                         review (an existing open/ or completed/ topic of that name is reused); prints its path.
 
+A plan whose `github_issue_url` names a different repo than the bucket's `Repo slug` is ignored everywhere: a repo
+that moved restarts issue numbering, so its recorded number could hit an unrelated issue in the new repo.
+
 Env: PLAN_LIFECYCLE_GH  gh wrapper to run (default: gh-bot.sh beside this script's parent); it runs with the repo
                         directory as cwd because the bot installation is picked from the cwd's origin.
 Exit: 0 ok | 1 audit found drift | 2 usage | 3 topic not finishable | 4 unavailable (missing bucket/topic/slug, gh failed)
@@ -45,6 +48,7 @@ import wf_lint_base as base  # noqa: E402
 STATES = ("open", "completed")
 NUMBER_RE = re.compile(r"^[0-9]+$")
 SLUG_RE = re.compile(r"[:/]([^/:]+/[^/]+?)(?:\.git)?/?$")
+ISSUE_URL_RE = re.compile(r"github\.com/([^/\s]+/[^/\s]+)/(?:issues|pull)/[0-9]+")
 GH_TIMEOUT = 90
 
 OK, DRIFT, USAGE, UNFINISHED, UNAVAILABLE = 0, 1, 2, 3, 4
@@ -115,10 +119,17 @@ class Store:
     def plan_files(topic: Path) -> list[Path]:
         return sorted(p for p in topic.glob("*.md") if p.is_file())
 
-    @staticmethod
-    def issue_of(plan: Path) -> int | None:
-        value = wf_frontmatter.parse(plan).get("github_issue", "")
-        return int(value) if NUMBER_RE.match(value) else None
+    def issue_of(self, plan: Path, bucket: str) -> int | None:
+        """The plan's issue number; None when absent or when its `github_issue_url` names a different repo
+        than the bucket's (a repo that moved restarts numbering, so the number would hit an unrelated issue)."""
+        meta = wf_frontmatter.parse(plan)
+        value = meta.get("github_issue", "")
+        if not NUMBER_RE.match(value):
+            return None
+        match = ISSUE_URL_RE.search(meta.get("github_issue_url", ""))
+        if match and match.group(1).lower() != self.slug_for(bucket).lower():
+            return None
+        return int(value)
 
     def open_issue_numbers(self, bucket: str, ignore_topic: str | None = None) -> set[int]:
         found: set[int] = set()
@@ -126,7 +137,7 @@ class Store:
             if topic.name == ignore_topic:
                 continue
             for plan in self.plan_files(topic):
-                number = self.issue_of(plan)
+                number = self.issue_of(plan, bucket)
                 if number is not None:
                     found.add(number)
         return found
@@ -229,7 +240,7 @@ def completed_plans(store: Store, bucket: str, topic_name: str | None) -> list[t
         for plan in store.plan_files(topic):
             if wf_frontmatter.parse(plan).get("finished") is False:
                 continue
-            number = store.issue_of(plan)
+            number = store.issue_of(plan, bucket)
             if number is not None:
                 out.append((plan, number))
     return out
@@ -258,7 +269,7 @@ def cmd_complete(store: Store, args: argparse.Namespace) -> int:
     for p, v in states.items():
         if v is None:
             print(f"note     {p.name} has no `finished:` line; ignored")
-    pairs = [(dst / p.name, n) for p in plans if (n := store.issue_of(p)) is not None]
+    pairs = [(dst / p.name, n) for p in plans if (n := store.issue_of(p, bucket)) is not None]
     if args.dry_run:
         print(f"would move {src.relative_to(store.root)} -> {dst.relative_to(store.root)}")
     else:
@@ -316,7 +327,7 @@ def cmd_audit(store: Store, args: argparse.Namespace) -> int:
             print(f"ORPHAN        {bucket}: open/{topic.name} is review-only, no plan (sweep it to completed/)")
             drift += 1
         wanted = [(p, n, "completed") for p, n in completed_plans(store, bucket, None)]
-        wanted += [(p, n, "open") for t in store.topics(bucket, "open") for p in store.plan_files(t) if (n := store.issue_of(p)) is not None]
+        wanted += [(p, n, "open") for t in store.topics(bucket, "open") for p in store.plan_files(t) if (n := store.issue_of(p, bucket)) is not None]
         if not wanted:
             continue
         try:

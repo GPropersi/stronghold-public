@@ -98,6 +98,21 @@ git status --short
 
 If the diff is empty (nothing to push), inform the user and stop.
 
+### 1b. PR Size Check (before any review spend)
+
+A reviewer cannot meaningfully review a huge PR (a 12k-line PR once shipped as one unit). Measure what the **PR** will contain, i.e. the diff against the default branch, not against a previously pushed remote branch, excluding lockfiles and generated files (substitute the **Default branch** for `main`):
+
+```bash
+git diff origin/main...HEAD --numstat -- . ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' ':(exclude)*.snap' ':(exclude)*.min.js' ':(exclude)*.pb.go' ':(exclude)*.generated.*'
+```
+
+Sum the added and deleted columns (changed lines). **Rough ceiling: about 1500 changed lines.** The real goal is thematic, modular PRs (one coherent concern each), so file count is not a limit; list the files only to help judge themes. Under the ceiling: continue silently. Over it: surface it via `AskUserQuestion` (`header: "PR size"`) showing the line total, file and commit counts, and the distinct themes you can see (largest directories and commit subjects), with these options (first one recommended):
+
+- **Stop and split first (Recommended)** — STOP the push (no review, no PR). Propose a split by theme (e.g. store layer, HTTP API, worker, docs), naming which commits or paths belong to each part, so each part is a self-contained, green PR. The user then cuts the branches and re-runs `/git-push` on each. Splitting before a PR exists is cheaper and safer than `/split-pr` afterwards.
+- **Push as one PR anyway** — continue to Step 2 and note the size and the user's decision in the PR body's Summary.
+
+The ceiling is a rough warning, not a gate: a single coherent theme (a migration, a mechanical rename, a large test suite) can legitimately exceed it, and a PR well under it that mixes unrelated themes is also worth flagging. Never split, reorder or rewrite commits yourself in this step.
+
 ### 2. Resolve Plan Folder
 
 Pick the plan topic folder in the **central stronghold store** `~/code/plans/<repo>/{open,completed}/<topic>/`, where `<repo>` is the value of the working repo's `Plans bucket` seam key (see the repo's **Plans store (central)** seam) and `<repo-dir>` is the working repo's directory name, where this branch's push review belongs. The app branch/PR does NOT contain its own plan; the plan lives in the central store, so the script searches `open/` then `completed/` there, never the working sub-repo's tree. The scoring is deterministic code, not a model judgment: run
@@ -636,6 +651,16 @@ Output:
 - Branch name and number of commits
 - One-line summary from each review subagent
 
+### 9b. UI Verification Screenshots (capture only; orchestrator level)
+
+Run `git diff origin/<default-branch>...HEAD --name-only` and set `<touched-frontend>` true when the branch changed any JS/TS, template (HTML/Jinja) or CSS file, including an admin-only page. Otherwise skip this step.
+
+When true, capture the **implemented, built feature** with Playwright MCP, at **both a desktop viewport (1280px wide) and a mobile viewport (420px wide), always** — never desktop only, even when the feature is not mobile-specific:
+- The Step 7d gate's UI suite already brought up the built stack for `<worktree>`; read its URL from the repo's **App URL** key (a worktree's port comes from the repo's stack-info command). If the stack is down, bring it up with the repo's built-UI start command; if it cannot be brought up, say so in the final report rather than skipping silently.
+- Reach an authenticated view with the repo's **Test login** key (for app-main, the scoped `login-with-playwright` skill; an admin page needs an admin login).
+- Capture each key state of the change (e.g. closed AND open for a modal, toggle or sheet). Use the final built UI, never a design mock.
+- Save under `<plan-dir>/screenshots/` (gitignored in the stronghold; never commit images to the sub-repo), named `<state>-desktop.png` / `<state>-mobile.png`. Do NOT send them here: they are sent in Step 11.
+
 ### 10. Sync to stronghold
 
 Steps 1–9 wrote the **push review file** (`<plan-dir>/reviews/push-review-<branch>.md`) and a **changelog** entry into the **stronghold** (`~/code`, remote `OWNER/stronghold`) — not the sub-repo. Persist them with the auto-sync script as the final action. **Do NOT improvise a raw `git push` / `git --git-dir=… push` for this, and do NOT pass `dangerouslyDisableSandbox`.**
@@ -656,6 +681,10 @@ Then run:
 - The script path-scopes its own staging and its safety guard refuses unless origin is `OWNER/stronghold` on `main`, so it only ever syncs the stronghold, never the sub-repo — safe to run from the `~/code` cwd even though the sub-repo work happened elsewhere.
 - Keep `<MESSAGE>` free of `;` `&&` `||` `$(` and backticks (the compound-command / substitution guard hooks inspect the whole invocation). Use a scoped message, e.g. `plans(<repo>): git-push <branch> push review + PR #<N>`.
 - End the final report with one line: `Tip: /clear before the next skill (e.g. /gmas after merge) — the PR, commits and review file hold all state, so a fresh context loses nothing and cuts token spend.`
+
+### 11. Send UI Screenshots (the very last action — only when Step 9b captured any)
+
+After the final report and the `/clear` tip line are printed, send every desktop and mobile screenshot saved in Step 9b with `SendUserFile`, one call per image (desktop then mobile for each state). Nothing else is printed or run after this step.
 
 ## Important Notes
 

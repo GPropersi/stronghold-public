@@ -161,9 +161,9 @@ When all steps are done or the plan is marked finished:
 3. If failures exist, enter the **Test Fix Loop** (Section 2e).
 4. **UI Verification Screenshot.** If `<touched-frontend>` is true, do the following before the final report; otherwise skip to the next item. Capture and provide a Playwright screenshot of the **actual built feature** so the user sees the rendered result, not just a green suite. This catches what tests miss (e.g. CSS that compiles and passes assertions but renders invisibly).
    - The UI-tests run above already rebuilt and brought up the stack with built assets, so the app is live at the repo's **App URL** — capture against that state.
-   - Use the repo's **Test login** mechanism to reach an authenticated view (for app-main this is the scoped `login-with-playwright` skill). For a mobile feature, resize the viewport to a mobile width (e.g. 420px) first. Capture the key state(s) of the change (e.g. open AND closed for a toggle/sheet).
-   - Save under `~/code/plans/<repo>/open/<topic>/screenshots/` (gitignored) and surface the image to the user with `SendUserFile` — never just report a path.
-   - The image MUST be of the implemented feature, NOT the upfront design mock. If the app cannot be brought up, say so explicitly rather than silently skipping.
+   - Use the repo's **Test login** mechanism to reach an authenticated view (for app-main this is the scoped `login-with-playwright` skill). Capture the key state(s) of the change (e.g. open AND closed for a toggle/sheet) at **both a desktop viewport (1280px wide) and a mobile viewport (420px wide), always** — never desktop only, even when the feature is not mobile-specific.
+   - Save under `~/code/plans/<repo>/open/<topic>/screenshots/` (gitignored), named `<state>-desktop.png` / `<state>-mobile.png`. Do NOT send them yet: they are sent in Step 6, after the Handoff block, so they are the very last thing the user receives.
+   - The image MUST be of the implemented feature, NOT the upfront design mock. If the app cannot be brought up, say so explicitly in the final report rather than silently skipping.
 5. **Clean up** all temp test output files.
 6. **Delete all files in the plan topic's `tmp/`** — this is the subagent communication directory created during the run; it is not needed after completion. Note: when the final step set the plan `finished: true`, next-step-taker performs the lifecycle move — a `git mv` of the WHOLE `~/code/plans/<repo>/open/<topic>/` → `~/code/plans/<repo>/completed/<topic>/` (topic-as-unit). Expect the topic dir (and its `tmp/`) to now live under `completed/<topic>/`; resolve the `tmp/` path accordingly.
 7. Report final summary:
@@ -192,7 +192,7 @@ After the execution loop finishes (all steps done or plan marked finished) and t
 - This runs **once at the very end**, not per step. Each delegated `/next-step-taker` may itself call this same sync as its own final step; because the script is idempotent (it skips when nothing is staged), that redundancy is intentional and this end-of-run call is a cheap no-op if the per-step syncs already pushed everything.
 - Do NOT open a PR or feature branch for this — the stronghold pushes direct to `main`. (This syncs only the stronghold; the sub-repo code changes committed during the run keep their own normal git-commit/git-push/PR flow.)
 
-### Step 5: Handoff (final output — always the last thing printed; only when the run completed)
+### Step 5: Handoff (final text output — always the last thing printed; only when the run completed; Step 6 then sends the screenshot files)
 
 When the run ended COMPLETE (not on a blocker — then print the blocker report instead), print this block from values resolved this run (no extra tool calls):
 
@@ -206,6 +206,10 @@ Tip: /clear first — the commits and the plan file hold all state, so a fresh c
 ```
 
 `<repo-dir>` is the working repo's directory, `<plan-branch>` the branch resolved by the Branch Guard (never the Default branch), `<worktree-or-primary-clone>` the resolved `<worktree>` (as `~/code/...`), `<repo>` the `Plans bucket` value, and the plan path reflects the plan's final location (`completed/<topic>/` when next-step-taker moved the topic after `finished: true`). For `repo: stronghold` plans there is no `/git-push` (the stronghold pushes direct to `main` via the sync above) — print `Done: stronghold changes are already synced to main.` instead.
+
+### Step 6: Send UI Screenshots (the very last action — only when `<touched-frontend>` is true and the run completed)
+
+After the Handoff block is printed, send every desktop and mobile screenshot saved in Step 3.4 with `SendUserFile`, one call per image (desktop then mobile for each state). Nothing else is printed or run after this step. If Step 3.4 could not capture them, the final report already said so; send nothing.
 
 ## Key Differences from next-step-taker
 
