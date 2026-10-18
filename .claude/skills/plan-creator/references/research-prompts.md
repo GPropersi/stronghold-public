@@ -1,6 +1,6 @@
 # Research Subagent Prompts
 
-Each subagent is a **research-only** general-purpose agent that explores the codebase using Glob, Grep, and Read. It receives the user's feature/task description and a list of affected modules, files, or endpoints identified by the main agent. All subagents return structured JSON and must independently discover and read source files — the main agent does NOT pre-read files for them.
+Each subagent is a **research-only** general-purpose agent that explores the codebase using Glob, Grep, and Read. It receives the user's feature/task description and a list of affected modules, files, or endpoints identified by the main agent. All subagents return structured JSON and must independently discover and read source files — the main agent does NOT pre-read files for them. Sections below are research **areas**; SKILL.md § 2b groups them into at most three agents. An agent covering several areas reads shared files once and writes one JSON file per area.
 
 > **Repo-agnostic note.** The "what to read" lists and `findings` shapes below use example vocabulary from a Flask/Jinja/Pydantic/SQLAlchemy stack (routes, blueprints, templates, Pydantic schemas). Treat these as **illustrative** — map each one to the working repo's actual stack and layout (its `## Claude Config` → **Stack** tells you what to expect). For a non-Flask repo, "route handler" → the repo's controller/handler, "Pydantic schema" → the repo's validation/DTO layer, "Jinja template" → the repo's view/serializer, etc. Read what the repo actually has; do not force these names onto it.
 
@@ -8,7 +8,7 @@ Each subagent is a **research-only** general-purpose agent that explores the cod
 
 ## Response Format (all subagents)
 
-> **File delivery:** Write your complete response to the file path provided in your prompt (`~/code/plans/<repo>/open/<topic>/research/research-<focus>.md`) **using the `Write` tool** — NEVER `cat <<EOF`, `python3 << 'EOF'`, `cat >`, `tee`, `printf >`, `echo >`, or any Bash heredoc/redirect. Any heredoc or inline script containing `{` and quotes triggers the brace+quote security prompt; the `Write` tool bypasses this. Return only this one-line confirmation: `Written to <path>`. The orchestrator will read the file. The format below is unchanged.
+> **File delivery:** Write your complete response to the file path provided in your prompt (`~/code/plans/<repo>/open/<topic>/research/research-<focus>.md`) **using the `Write` tool** — NEVER `cat <<EOF`, `python3 << 'EOF'`, `cat >`, `tee`, `printf >`, `echo >`, or any Bash heredoc/redirect. Any heredoc or inline script containing `{` and quotes triggers the brace+quote security prompt; the `Write` tool bypasses this. Return only one `Written to <path>` line per file written. The orchestrator will read the files. The format below is unchanged.
 
 ```json
 {

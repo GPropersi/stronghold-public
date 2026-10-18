@@ -128,6 +128,8 @@ Launch the subagents selected by `<review-tier>` (Step 1e) **in parallel** using
 > 5. Return only: `Written to <path>`.
 >
 > **Do not defer any dimension to a follow-up pass.** Every checklist item must be evaluated.
+>
+> **Contracts, not mechanics (trial since 2026-10-17).** Plans now spell out contracts exactly and leave mechanics to the executor (plan-creator → "Contracts exact, mechanics to the executor"). Review contracts at full depth: endpoints, status codes, data shapes, schema, cross-module signatures and their callers, authorization, UX states, ordering. Do NOT raise findings that a plan omits mechanics: imports, internal helper names, exact edit locations, which test files need key updates. Raise one only when the plan states a mechanic that is *wrong* in a way that would mislead the executor about a contract. DO flag a step whose `Must be true:` list misses a behavior or failure mode the step changes, since that list is the executor's safety net. Older plans without a `Must be true:` list: review as before.
 > <Pass 2+ only: "This is Pass N. Do not re-flag issues already fixed. Prior fixes: [concise bullet list of fix titles from earlier passes]">
 > <If scope present (Step 1d): "This review is SCOPED to: <scope>. Constrain your SOURCE FILE reads to files/areas within this scope — you must still read the full plan file (step 3 above) for structural understanding, but do not read or flag source files outside the scope. If your checklist dimension has nothing in-scope to evaluate, return verdict PASS with an empty findings array; do not flag out-of-scope areas.">
 
@@ -137,7 +139,7 @@ Launch the subagents selected by `<review-tier>` (Step 1e) **in parallel** using
 - Use `model: sonnet` for all review subagents
 - Only launch the subagents selected by `<review-tier>` (Step 1e) — for `small`, this means #2, #3, and #7 are simply not launched this pass, not launched-then-discarded
 - Skip Subagent #7 (UX, Accessibility & Edge Cases) if the plan has no UI/frontend changes — it adds no value for backend-only plans (this is in addition to, not a substitute for, the tier-based skip)
-- NEVER use `subagent_type: "Explore"` — Explore agents cannot use the Write tool. Omit `subagent_type` (defaults to general-purpose)
+- Use `subagent_type: "reviewer"` (`.claude/agents/reviewer.md`: read-only tools plus Write, ~15k-token startup instead of ~36k). NEVER use `subagent_type: "Explore"` — Explore agents cannot use the Write tool. Fixer and design-decision apply agents stay general-purpose (they edit the plan)
 - If a `<scope>` directive is set (Step 1d), it constrains subagents' SOURCE FILE reads only — every subagent still reads the full plan file and evaluates every checklist item, returning PASS + empty findings where nothing in-scope applies
 
 Subagents and the research file(s) each should check first (Step 3 of the prompt template above). #1 and #3 each cover two former roles, merged for token efficiency — the pairs shared both their source files and a "what's missing" framing (see each file's Part A / Part B split):

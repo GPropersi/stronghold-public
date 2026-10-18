@@ -332,8 +332,8 @@ With the cwd at the part's worktree, one Bash call each:
 - Re-emit the `Co-Authored-By` and `Claude-Session` trailers **verbatim from the session's own
   attribution lines**; do not invent or paraphrase them.
 - Commit identity follows the repo's **Bot identity** seam where it has one — the
-  `git -c user.name=… -c user.email=… commit …` form is allowlisted as
-  `Bash(git -c user.name=* commit *)`.
+  `git -c user.name=… -c user.email=… commit …` form is approved by the
+  `allow-git-ops.sh` hook (not a settings rule, whose wildcard would also admit other `-c` options).
 - Skill Step 5 rebuilds and re-commits each part on its real PR branch with the **same** trailers;
   these verification commits are thrown away with their branches.
 

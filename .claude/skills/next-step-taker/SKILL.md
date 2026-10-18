@@ -54,6 +54,8 @@ Determine the mode based on user intent:
 - **Context discipline** (every turn re-reads your whole context, and executors past ~150k are the costly ones): send command output you expect to exceed ~50 lines to a `/tmp/claude/...` file and read it with `Read` limit or `grep -m`/`-l`; prefer `Read` with offset/limit or `grep -n` over `cat`/full-file reads for files you only need part of; batch independent reads into one message. None of this changes what you must read to implement the step correctly.
 - Read all files mentioned in the current step before making changes
 - Implement all changes specified in the step following existing code patterns
+- **Own the mechanics** (since the 2026-10-17 trial, plans give contracts exactly and leave mechanics to you): before editing, grep the callers, importers and tests of every symbol you change, and update them in this step. Handle imports and dead-import removal yourself (plan-creator's Dead Import Elimination Protocol is your checklist). Never change a contract the plan states (endpoint, status code, data shape, schema, cross-module signature): if one is wrong, STOP and report it.
+- If the step has a `Must be true:` list, write or extend tests so every item is proven, and confirm each passes
 - Make edits, create files, or delete files as specified in the plan
 - Edit sub-repo files only by absolute path under `<worktree>`; translate any plan-step reference written as `~/code/<repo>/...` accordingly.
 - Follow the working repo's CLAUDE.md guidelines (coding conventions, no debug leftovers, typing/naming rules, module-communication rules, etc.)
@@ -246,7 +248,7 @@ Before launching the review subagents, the main agent must:
 
 ### Phase 1: Two Parallel Review Subagents (Read-Only)
 
-Launch both subagents simultaneously in one message using the Agent tool with `model: "sonnet"`. Each receives:
+Launch both subagents simultaneously in one message using the Agent tool with `subagent_type: "reviewer"` and `model: "sonnet"` (the read-only reviewer type starts at ~15k tokens of context instead of ~36k; the fix subagent below stays general-purpose). Each receives:
 - The list of changed files
 - The implementation intent summary
 - Their specific review focus (below)
@@ -274,6 +276,7 @@ Items: (only if FINDINGS)
 - Are imports ordered per the repo's import-ordering convention?
 - Over-engineering or premature abstractions?
 - Test coverage: were tests added for new behavior? Happy + sad paths?
+- `Must be true:` list (when the plan step has one): is **every** item proven by a test that would fail without the change? An unproven item is a `major` finding. Since the 2026-10-17 trial, plans leave mechanics (imports, helper names, which tests to update) to the executor, so also check the executor found the callers and tests its change affects.
 - CLAUDE.md compliance: the working repo's coding conventions (typing/annotations, descriptive naming, no single-letter variables, etc.)?
 - Clean up: no unused imports, no dead code introduced?
 

@@ -2,7 +2,7 @@
 
 These prompts drive the research phase for **master plans** — multi-PR initiatives that need to be decomposed into phases. The focus is **breadth** (scope, phase boundaries, ordering, conventions) rather than **depth** (signatures, data shapes). Use `plan-creator/references/research-prompts.md` for sub-plan depth research.
 
-Each subagent is a **research-only** general-purpose agent that explores the codebase using Glob, Grep, and Read. It receives the user's initiative description. All subagents discover and read source files independently (use Glob to find files by pattern, Grep to search for symbols/usages, Read to examine contents — do NOT guess file paths, discover them) and write their output file using the Write tool, returning only a one-line confirmation.
+Each subagent is a **research-only** general-purpose agent that explores the codebase using Glob, Grep, and Read. It receives the user's initiative description. All subagents discover and read source files independently (use Glob to find files by pattern, Grep to search for symbols/usages, Read to examine contents — do NOT guess file paths, discover them) and write their output file using the Write tool, returning only a one-line confirmation. Sections below are research **areas**; SKILL.md § Step 3 runs them as two agents, each writing one file per area and returning one confirmation line per file.
 
 > **Stack note:** the tooling and module names in the examples below are **illustrative only** —
 > they stand in for whatever build tool, test runner, and module layout the working repo actually

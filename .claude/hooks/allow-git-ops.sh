@@ -14,6 +14,11 @@
 # default permission system and the other guard hooks decide. Because a "deny" from any
 # PreToolUse hook wins over an "allow", the block-* guards (unsafe-push, compound, writes,
 # command-substitution, …) still gate these commands — this hook cannot override them.
+#
+# `-c` is allowed only for the bot-identity keys, and `--exec-path` is never skipped: any
+# other config key (core.fsmonitor, core.sshCommand, core.pager, alias.*,
+# credential.helper=!…) or an exec path can make a "safe" subcommand run an arbitrary
+# command, so those defer to a normal permission prompt.
 
 set -eu
 
@@ -53,18 +58,23 @@ n=${#toks[@]}
 while [ "$i" -lt "$n" ]; do
   t="${toks[$i]}"
   case "$t" in
-    -C|-c)
+    -C)
       i=$((i + 2)); continue ;;                         # takes a separate argument
-    --git-dir|--work-tree|--namespace|--exec-path|--super-prefix)
+    -c)
+      case "${toks[$((i + 1))]:-}" in                   # bot identity only; else defer
+        user.name=*|user.email=*) i=$((i + 2)); continue ;;
+        *) exit 0 ;;
+      esac ;;
+    --git-dir|--work-tree|--namespace|--super-prefix)
       i=$((i + 2)); continue ;;                         # bare form: value is next token
-    --git-dir=*|--work-tree=*|--namespace=*|--exec-path=*|--super-prefix=*)
+    --git-dir=*|--work-tree=*|--namespace=*|--super-prefix=*)
       i=$((i + 1)); continue ;;                         # attached form: value is inline
     -p|--paginate|-P|--no-pager|--bare|--no-replace-objects|--literal-pathspecs|--no-literal-pathspecs|--no-optional-locks|--icase-pathspecs)
       i=$((i + 1)); continue ;;                         # valueless global flags
     --)
       i=$((i + 1)); break ;;
     -*)
-      exit 0 ;;                                          # unknown leading flag — defer, don't guess
+      exit 0 ;;                                          # unknown leading flag (incl. --exec-path) — defer, don't guess
     *)
       break ;;                                           # this is the subcommand
   esac

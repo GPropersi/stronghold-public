@@ -1,7 +1,7 @@
 ---
 name: split-pr
-argument-hint: [PR# or branch]
-description: Decompose one oversized, already-green PR into N smaller PRs that merge sequentially. Use for "split this PR", "this PR is too big". HARD PRECONDITION - only after /git-push opened the PR and its CI is fully green; failing or running checks are refused (failing goes to /pr-review-fixer).
+argument-hint: [PR# or branch] [--pre-pr]
+description: Decompose one oversized, already-green PR into N smaller PRs that merge sequentially. Use for "split this PR", "this PR is too big". HARD PRECONDITION - only after /git-push opened the PR and its CI is fully green (failing goes to /pr-review-fixer), or as /git-push Step 7e's pre-PR handoff (--pre-pr) for a reviewed branch whose push gate passed at HEAD.
 ---
 
 # Split a Green PR into Sequential PRs
@@ -18,6 +18,10 @@ preserve, so the whole thing reduces to two checkable invariants:
 2. **Prefix greenness** — every prefix of the merge order must be independently green.
 
 Neither is knowable before CI runs, which is why this is a post-push skill and not a plan-time one.
+**Pre-PR mode (`--pre-pr`):** `/git-push` Step 7e hands off a reviewed branch whose push gate passed at
+HEAD; that gate result stands in for green CI and nothing is re-reviewed. The parts still ship one at
+a time through Steps 4-5. Its deltas to Steps 1a, 1c, 1e, 5d, 5e, 6a and 6b live in
+`references/pre-pr-mode.md`; read it first in that mode.
 
 > **Repo-agnostic.** This skill reads the working repo's `## Claude Config` section (schema in
 > `~/code/CLAUDE.md`) for every repo-specific value — **Repo slug**, **Default branch**, **Token
@@ -138,7 +142,7 @@ cut — with `GH_TOKEN=$(<token-generator>) gh pr view <part-PR#> --json state,m
 A resume still re-runs 1c (green CI) and 1d (pin the base) for idempotent safety — but see 1d's
 resume guard: it must never silently recompute and overwrite the recorded base.
 
-**1c. Hard-gate on green CI.** Run `GH_TOKEN=$(<token-generator>) gh pr checks <PR#>`.
+**1c. Hard-gate on green CI** (pre-PR mode: `references/pre-pr-mode.md`'s entry check replaces 1a and 1c). Run `GH_TOKEN=$(<token-generator>) gh pr checks <PR#>`.
 
 - The `GH_TOKEN=$(...)` prefix is **mandatory**. A bare `gh pr checks <PR#>` is *hard-blocked* by
   `block-unsafe-push.sh` on an app-token repo — not merely unapproved — and `settings.json`
@@ -470,8 +474,8 @@ resolves its target from the Bash cwd, which does **not** persist in a subagent;
 
 ## References
 
-Read one level deep, on demand, so this file stays under 500 lines. All five live in `references/`
-beside this file; each ends with a verified-facts ledger (**LIVE** rows came from the real rehearsal).
+Read one level deep, on demand. All six live in `references/` beside this file; the first five end
+with a verified-facts ledger (**LIVE** rows came from the real rehearsal).
 
 - `slice-planner-prompt.md` — the full planner subagent prompt: input format, the generator-ownership
   rule with counter-examples, the atoms table, the inert-superset and amend-in-later-part rules, the
@@ -489,6 +493,8 @@ beside this file; each ends with a verified-facts ledger (**LIVE** rows came fro
 - `disposition.md` — the close + cross-link calls and `gh pr close`'s missing body-file flag, the
   archive re-check and self-gated branch deletion, which branch still needs an explicit remote delete,
   `split_into:`, the sync, and the one-PR assumptions downstream with the right answer. **Step 6.**
+- `pre-pr-mode.md` — the `/git-push` Step 7e handoff: the push-gate entry check that replaces green
+  CI, why no re-review is needed, and the per-step deltas. **Read first when `--pre-pr` is passed.**
 
 ## Status
 

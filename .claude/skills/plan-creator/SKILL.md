@@ -87,7 +87,7 @@ From the user's feature/task description, identify:
 - **Affected modules**: Which backend modules, frontend modules, templates/views, and test directories are involved? (Map to the repo's own layout.)
 - **Affected endpoints**: Which routes will be created, modified, or deleted?
 - **Affected symbols**: Which functions, classes, schemas, or models will change?
-- **Task type flags**: Does this involve data validation or model changes? (determines whether Subagent #5 launches). Does this create, modify, or remove an HTTP endpoint? (determines whether Subagent #3 launches). Does this add or modify UI? (determines whether Subagent #6 launches)
+- **Task type flags**: Does this involve data validation or model changes? (adds area 5 to Agent A). Does this create, modify, or remove an HTTP endpoint? (adds area 3 to Agent B). Does this add or modify UI? (launches Agent C)
 
 ### 2b. Launch Research Subagents
 
@@ -95,7 +95,7 @@ Read `references/research-prompts.md` for the full prompt definitions and expect
 
 Before launching subagents, create the `~/code/plans/<repo>/open/<topic>/research/` directory (permanent — not `tmp/`; see the Persistent Research Artifacts note below).
 
-Launch subagents **in parallel** using the Agent tool with `model: "sonnet"` and **no `subagent_type`** (defaults to general-purpose). NEVER use `subagent_type: "Explore"` — Explore agents cannot use the Write tool. Each subagent:
+Launch subagents **in parallel** using the Agent tool with `subagent_type: "researcher"` and `model: "sonnet"` (`.claude/agents/researcher.md`: read-only tools plus Write and web, ~15k-token startup instead of ~36k). NEVER use `subagent_type: "Explore"` — Explore agents cannot use the Write tool. Each subagent:
 - Receives the user's task description, the research targets from 2a, and the path it must write its output to
 - Reads source files independently (the main agent does NOT pre-read files)
 - Writes its full findings JSON to `~/code/plans/<repo>/open/<topic>/research/research-<focus>.md` (where `<focus>` describes the research area, e.g., `research-architecture.md`, `research-dependencies.md`, `research-request-chain.md`, `research-tests.md`, `research-schemas.md`)
@@ -115,16 +115,17 @@ Include this preamble in every subagent prompt:
 
 Unlike scratch files under `~/code/plans/<repo>/open/<topic>/tmp/`, research files live at `~/code/plans/<repo>/open/<topic>/research/` and are **never deleted** — same lifecycle as `~/code/plans/<repo>/open/<topic>/mocks/`. `/plan-reviewer`'s subagents read the file(s) matching their role as grounding context before touching source, which skips the broad Glob/Grep discovery sweep the research subagents already paid for. This is why Step 2c and Step 3's cleanup below write/leave these files at `research/` instead of `tmp/`.
 
-| # | Subagent | Focus | Launch condition |
-|---|---|---|---|
-| 1 | Architecture & Patterns | Module structure, conventions, naming | Always |
-| 2 | Dependency & Impact Mapping | Callers, callees, importers, cross-module effects | Always |
-| 3 | Request/Response Chain | Per-endpoint full-stack trace | Only when the task creates, modifies, or removes an HTTP endpoint |
-| 4 | Test Infrastructure | Markers, fixtures, coverage, test patterns | Always |
-| 5 | Schema & Data Shapes | Validation schemas, DB models, form classes, frontend contracts | Only when task involves data validation or model changes |
-| 6 | UX & Interaction Analysis | Page-level feature inventory, cross-feature conflicts, accessibility, empty/error states, mobile interactions | Only when the task adds or modifies UI elements |
+The six research areas run as **at most three agents**. Areas that read the same source files share one agent, which writes **one file per area**, so plan-reviewer's research-file mapping is unchanged. Give each agent the prompt sections of all its areas from `references/research-prompts.md`, the list of files it must write, and one `Written to <path>` line per file to return.
 
-All applicable subagents must launch in a **single message** for true parallelism.
+| Agent | Research areas (prompt sections) | Files written | Launch condition |
+|---|---|---|---|
+| A — Code map | 1 Architecture & Patterns, 2 Dependency & Impact Mapping, 5 Schema & Data Shapes (5 only when the task involves data validation or model changes) | `research-architecture.md`, `research-dependencies.md`, `research-schemas.md` | Always |
+| B — Behavior & verification | 4 Test Infrastructure, 3 Request/Response Chain (3 only when the task creates, modifies or removes an HTTP endpoint) | `research-tests.md`, `research-request-chain.md` | Always |
+| C — UX | 6 UX & Interaction Analysis | `research-ux-interaction.md` | Only when the task adds or modifies UI elements |
+
+*Why merged:* areas 1, 2 and 5 read the same modules, and areas 3 and 4 the same routes and tests. Separate agents re-read those files and each paid the ~36k-token agent startup context.
+
+All applicable agents must launch in a **single message** for true parallelism.
 
 ### 2c. Collect and Use Research Results
 
@@ -166,6 +167,9 @@ worktree: <repo>/.claude/worktrees/<slug>
 - [ ] <Specific, actionable sub-task>
 - [ ] <Specific, actionable sub-task>
 
+**Must be true:**
+- <Observable behavior this step's tests prove, incl. failure modes, e.g. "restoring a URL whose UTub is deleted returns 409 and leaves it in Trash">
+
 ### 2. <Phase Title>
 ...
 
@@ -176,8 +180,9 @@ finished: false
 **Rules:**
 - Think like a staff engineer: anticipate edge cases, dependencies, and ordering constraints.
 - Each phase must have at least one actionable to-do checkbox.
-- To-do items must be detailed enough that a junior engineer can execute them without ambiguity — include file paths, function names, data shapes, or API contracts where relevant.
-- The to-do list carries the detail; phase descriptions should be brief overviews.
+- **Contracts exact, mechanics to the executor (trial since 2026-10-17).** Spell out exactly what is expensive to get wrong late: endpoints, methods and status codes; request/response and data shapes; DB schema and migrations; signatures that cross module boundaries and their callers in other files; authorization/security rules; UX states (empty, error, mobile); step ordering. Leave out what the executor discovers and its tests or lint catch at once: imports, internal helper names, exact edit locations, which existing test files need key updates, standard verify commands. *Why:* plan reviews kept finding majors in pass 3, mostly mechanical (a missing import, exact-equality tests, a misdescribed helper API), each of which fails on the executor's first test run. Contract bugs (a 404, a universal 400) are the ones that cost a late redesign. Re-measure after 2-3 plans (findings by class per pass, executor fix loops, push-review finds); if push review starts catching contract bugs, move the line.
+- **Every step gets a `Must be true:` list.** It names the behaviors the step's tests must prove, failure modes and edge cases included. It is the safety net for detail the plan no longer spells out: the executor must satisfy every item, and the step review panel checks each one is proven by a test.
+- The to-do list carries the contract detail; phase descriptions should be brief overviews.
 - **Size each step to one executor's context.** Each step is executed by a fresh subagent whose cost grows with every turn (4 weeks of run-plan transcripts: executors with 41+ turns exceeded 150k tokens of context 66–93% of the time, those under 20 turns never did). Aim for roughly 8 files or 20 edits per step and split a larger phase into consecutive steps along natural seams (backend vs frontend, module vs its tests, markup vs behaviour), each leaving the tree green. Do not split just to shrink: steps that depend on each other's in-flight state should stay together, and the final full-verification step stays separate.
 - **Ground to-dos in research findings.** Every file path, function signature, constant name, or data shape referenced in a to-do must come from a research subagent's findings. If a subagent didn't cover it, read the file before writing the to-do.
 - **Specify exact data structures.** When a to-do item constructs or populates a dict, list, or object, name the exact keys and value types — e.g. (illustrative) `errors["email"] = [USER_FAILURE.EMAIL_TAKEN]`, not "add `EMAIL_TAKEN` to the errors dict." Vague structure descriptions produce silent runtime failures when the implementer guesses the wrong key.
@@ -248,6 +253,8 @@ Every step must include a verification command drawn from the repo's **Commands*
 If a step changes what the browser sees or reads but only runs integration tests, the plan is undertested — add the appropriate UI-level verification. Use the exact command literals the repo declares under **Commands**; do not hardcode another repo's targets.
 
 ### Dead Import Elimination Protocol
+
+**Trial (2026-10-17): this is now the executor's duty, not the plan's.** The executor runs lint on every step, which flags dead imports at once, so plans no longer list import removals. The protocol below stays as the executor's checklist.
 
 When any to-do item **deletes a function, class, or helper**, you must trace its import footprint within the same file and include cleanup of every import that becomes dead. This is a mechanical, exhaustive check — not a judgment call.
 

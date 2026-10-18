@@ -58,12 +58,15 @@ behalf.
 
 Before asking the user anything about design specifics, ground the investigation in what
 already exists. Read `references/research-prompts-design.md` for the full prompt set. Launch
-all subagents **in parallel**, in a single message, each with `model: "sonnet"` explicitly set
-(never omit it).
+all subagents **in parallel**, in a single message, each with `subagent_type: "researcher"` and
+`model: "sonnet"` explicitly set (never omit them).
 
-Create `~/code/plans/<repo>/open/<topic>/tmp/` first. Each subagent writes its findings to
-`~/code/plans/<repo>/open/<topic>/tmp/research-<focus>-design.md` and returns only a one-line
-confirmation. Read each file after they return.
+Create `~/code/plans/<repo>/open/<topic>/tmp/` first. The three research areas run as **two
+agents**: Agent A covers 1 Existing Pattern & Convention Discovery and 2 Integration & Dependency
+Surface, which read the same analog features. Agent B covers 3 Constraint & Precedent Discovery.
+Each agent writes one file per area to
+`~/code/plans/<repo>/open/<topic>/tmp/research-<focus>-design.md` and returns only one
+`Written to <path>` line per file. Read each file after they return.
 
 **Purpose:** every finding here either answers a question outright (no need to ask the user) or
 narrows an open question to a real, specific decision point — turning "how should this work?"

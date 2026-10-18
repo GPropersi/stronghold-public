@@ -84,7 +84,7 @@ Subagent prompt template (send to each, filling blanks):
 > PR body:
 > <body>
 
-Launch **all subagents in a single message** for true parallelism. Use `model: sonnet`. Do NOT use `subagent_type: "Explore"` — it cannot use the Write tool. Skip Subagent #1 (Plan Conformance) if `<plan-path>` is null.
+Launch **all subagents in a single message** for true parallelism. Use `subagent_type: "reviewer"` and `model: sonnet`. Do NOT use `subagent_type: "Explore"` — it cannot use the Write tool. Skip Subagent #1 (Plan Conformance) if `<plan-path>` is null.
 
 | # | Name                       | Focus                                                                  | Output file                       |
 |---|----------------------------|------------------------------------------------------------------------|-----------------------------------|

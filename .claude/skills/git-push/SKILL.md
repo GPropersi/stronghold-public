@@ -98,21 +98,6 @@ git status --short
 
 If the diff is empty (nothing to push), inform the user and stop.
 
-### 1b. PR Size Check (before any review spend)
-
-A reviewer cannot meaningfully review a huge PR (a 12k-line PR once shipped as one unit). Measure what the **PR** will contain, i.e. the diff against the default branch, not against a previously pushed remote branch, excluding lockfiles and generated files (substitute the **Default branch** for `main`):
-
-```bash
-git diff origin/main...HEAD --numstat -- . ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' ':(exclude)*.snap' ':(exclude)*.min.js' ':(exclude)*.pb.go' ':(exclude)*.generated.*'
-```
-
-Sum the added and deleted columns (changed lines). **Rough ceiling: about 1500 changed lines.** The real goal is thematic, modular PRs (one coherent concern each), so file count is not a limit; list the files only to help judge themes. Under the ceiling: continue silently. Over it: surface it via `AskUserQuestion` (`header: "PR size"`) showing the line total, file and commit counts, and the distinct themes you can see (largest directories and commit subjects), with these options (first one recommended):
-
-- **Stop and split first (Recommended)** — STOP the push (no review, no PR). Propose a split by theme (e.g. store layer, HTTP API, worker, docs), naming which commits or paths belong to each part, so each part is a self-contained, green PR. The user then cuts the branches and re-runs `/git-push` on each. Splitting before a PR exists is cheaper and safer than `/split-pr` afterwards.
-- **Push as one PR anyway** — continue to Step 2 and note the size and the user's decision in the PR body's Summary.
-
-The ceiling is a rough warning, not a gate: a single coherent theme (a migration, a mechanical rename, a large test suite) can legitimately exceed it, and a PR well under it that mixes unrelated themes is also worth flagging. Never split, reorder or rewrite commits yourself in this step.
-
 ### 2. Resolve Plan Folder
 
 Pick the plan topic folder in the **central stronghold store** `~/code/plans/<repo>/{open,completed}/<topic>/`, where `<repo>` is the value of the working repo's `Plans bucket` seam key (see the repo's **Plans store (central)** seam) and `<repo-dir>` is the working repo's directory name, where this branch's push review belongs. The app branch/PR does NOT contain its own plan; the plan lives in the central store, so the script searches `open/` then `completed/` there, never the working sub-repo's tree. The scoring is deterministic code, not a model judgment: run
@@ -173,7 +158,7 @@ Skip this step if 2c found a `<plan-file>`. Trigger only when no plan file exist
 
 Read `~/code/.claude/skills/git-push/references/subagent-prompts.md` for the full prompt definitions and expected response format.
 
-Launch **all 5 subagents in parallel** using the Agent tool with **no `subagent_type`** (defaults to general-purpose — NEVER use `subagent_type: "Explore"`, which cannot use the Write tool). Each subagent:
+Launch **all 5 subagents in parallel** using the Agent tool with **`subagent_type: "reviewer"`** (`.claude/agents/reviewer.md`: Read/Grep/Glob/Bash/Write only, so it starts at ~15k tokens instead of ~36k; NEVER use `subagent_type: "Explore"`, which cannot use the Write tool). Each subagent:
 - Receives the full diff output from Step 1
 - Receives its specific review focus area from the reference file
 - Receives `<tmp-dir>` and its assigned output filename(s) (see table below)
@@ -213,8 +198,8 @@ Parse:
 
 Evaluate:
 
-- **ALL PASS, no findings at all**: Proceed to Step 7d (test gate), then Step 8 (push).
-- **ALL PASS, only minor findings**: Write findings (Step 5), classify. If any findings exist (mechanical or design), proceed to Step 6. Otherwise proceed to Step 7d (test gate), then Step 8 (push).
+- **ALL PASS, no findings at all**: Proceed to Step 7d (test gate), Step 7e (size check), then Step 8 (push).
+- **ALL PASS, only minor findings**: Write findings (Step 5), classify. If any findings exist (mechanical or design), proceed to Step 6. Otherwise proceed to Step 7d (test gate), Step 7e (size check), then Step 8 (push).
 - **ANY FAIL**: Write findings (Step 5), classify, proceed to Step 6.
 
 Partition all findings into two lists:
@@ -298,7 +283,7 @@ Omit `### To-Do: Mechanical Fixes` if there are no mechanical findings. Omit `##
 | **RESOLVED — PUSHED** | Had FAILs, all fixed (mechanical + DDs), re-review passed, pushed |
 | **BLOCKED** | FAILs remain after 2 fix rounds, or re-review still fails |
 
-**No review file at all** is the outcome for "ALL PASS, no findings" (per Step 4b) — that case proceeds straight to Step 7d/8 and never reaches Step 5, so no verdict label is written.
+**No review file at all** is the outcome for "ALL PASS, no findings" (per Step 4b) — that case proceeds straight to Steps 7d, 7e and 8 and never reaches Step 5, so no verdict label is written.
 
 #### TO-DO Item Guidelines
 
@@ -472,7 +457,7 @@ the issue still exists in the current code.
 Write results to the same `<tmp-dir>/<role>.md` files.
 
 Evaluate re-review results:
-- **All now PASS**: Update review file verdict to `**RESOLVED — PUSHED**`. Proceed to Step 7d (test gate), then Step 8 (push).
+- **All now PASS**: Update review file verdict to `**RESOLVED — PUSHED**`. Proceed to Step 7d (test gate), Step 7e (size check), then Step 8 (push).
 - **Still FAIL with new findings**: apply the **Fix-Round Policy** above.
 
 ### 7d. Mandatory Push Gate (NEVER SKIP)
@@ -489,13 +474,30 @@ Rationale: `/git-push` mutates code (mechanical fixes in Step 6, design-decision
 ~/code/.claude/scripts/push-gate.sh <branch>
 ```
 
-The script reads the repo's `Push gate` seam key, maps the changed paths to suites (when in doubt, the whole matched suite runs, never an under-scoped one), runs the suites sequentially and writes `<git-common-dir>/push-gate/<sha>.json` (status `running`, then `pass`, `fail` or `na`). It refuses a dirty tracked tree (commit or `git stash` first; untracked files are ignored). Wait for the completion notification, then Read the result file (`push-gate.sh --status <branch>` prints its path and JSON). Per the amended CLAUDE.md "Background job completions" rule, this gate was launched by this skill under the user's explicit `/git-push` request, so a `pass` or `na` result continues straight to Step 8 WITHOUT asking the user again; the hook still refuses the push unless the result passed for the pushed sha. Any other background completion still waits for the user.
+The script reads the repo's `Push gate` seam key, maps the changed paths to suites (when in doubt, the whole matched suite runs, never an under-scoped one), runs the suites sequentially and writes `<git-common-dir>/push-gate/<sha>.json` (status `running`, then `pass`, `fail` or `na`). It refuses a dirty tracked tree (commit or `git stash` first; untracked files are ignored). Wait for the completion notification, then Read the result file (`push-gate.sh --status <branch>` prints its path and JSON). Per the amended CLAUDE.md "Background job completions" rule, this gate was launched by this skill under the user's explicit `/git-push` request, so a `pass` or `na` result continues straight to Step 7e and Step 8 WITHOUT asking the user again; the hook still refuses the push unless the result passed for the pushed sha. Any other background completion still waits for the user.
 
 **2. Evaluate** by the exit code and the result file:
 
-- **Exit 0** (`pass` or `na`): record `Test gate: PASS` (or `N/A`) with each suite and its counts in the review file, then proceed to Step 8.
+- **Exit 0** (`pass` or `na`): record `Test gate: PASS` (or `N/A`) with each suite and its counts in the review file, then proceed to Step 7e.
 - **Exit 1**, or (no exit code available after a killed run) a result file whose status is `running` or `fail` (red): **do NOT push.** Append the failing tests to the review file as a new `## Review N+1` section, classify into mechanical/design (Step 4b rules), then apply the **Fix-Round Policy** above (Step 7c); on the retry path, re-run this gate rather than Step 7c.
 - **Exit 2, 3 or 4, or a missing result file**: this is not a fix round. STOP, relay the printed reason to the user and do not push (the hook would refuse anyway); retry once after the user resolves it (dirty tree, stale branch, unmatched path or missing `Push gate` key, a suite that cannot run, a failed fetch).
+
+### 7e. PR Size Check (after reviews and the gate, right before push)
+
+Runs only after Step 7d passes, so it measures the final diff including every review fix (measuring earlier is premature: fixes change the size). Skip it when a PR for this branch already exists (`GH_TOKEN=$(<token-generator>) gh pr view <branch>`): an open PR is past the split point, and `/split-pr` covers that case.
+
+A reviewer cannot meaningfully review a huge PR (a 12k-line PR once shipped as one unit). Measure what the **PR** will contain, i.e. the diff against the default branch, not against a previously pushed remote branch, excluding lockfiles and generated files (substitute the **Default branch** for `main`):
+
+```bash
+git diff origin/main...HEAD --numstat -- . ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' ':(exclude)*.snap' ':(exclude)*.min.js' ':(exclude)*.pb.go' ':(exclude)*.generated.*'
+```
+
+Sum the added and deleted columns (changed lines). **Rough ceiling: about 1500 changed lines.** The real goal is thematic, modular PRs (one coherent concern each), so file count is not a limit; list the files only to help judge themes. Under the ceiling: continue silently to Step 8. Over it: surface it via `AskUserQuestion` (`header: "PR size"`) showing the line total, file and commit counts, and the distinct themes you can see (largest directories and commit subjects), with these options (first one recommended):
+
+- **Split now (Recommended)** — skip Steps 8, 9 and 9b (no push, no PR for the whole branch), run Step 10 (sync) so the review file is kept, then invoke `/split-pr <branch> --pre-pr` and let it run. A split only moves already-reviewed code (its union invariant proves the parts reproduce the reviewed tree exactly), so it never re-runs this skill's reviews; it re-proves the tests instead, with a full gate per part (each prefix of the merge order) plus `push-gate.sh` and CI on every part PR, then ships the parts one at a time, each squash-merged before the next is cut. This step's gate result for HEAD is its entry evidence, so make no commit between Step 7d and the handoff.
+- **Push as one PR anyway** — continue to Step 8 and note the size and the user's decision in the PR body's Summary.
+
+The ceiling is a rough warning, not a gate: a single coherent theme (a migration, a mechanical rename, a large test suite) can legitimately exceed it, and a PR well under it that mixes unrelated themes is also worth flagging. Never split, reorder or rewrite commits yourself in this step; `/split-pr` owns that.
 
 ### 8. Push
 

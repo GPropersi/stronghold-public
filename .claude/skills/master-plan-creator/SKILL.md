@@ -48,12 +48,12 @@ This is the master plan's home (e.g. `openapi-typescript`). Sub-plan folders wil
 
 ## Step 3: Deep Research — Master Scope
 
-Follow the subagent harness pattern in `.claude/skills/plan-creator/SKILL.md` § Step 2 (including: launch each research subagent with `model: "sonnet"`; NEVER use `subagent_type: "Explore"` — Explore agents cannot use the Write tool; omit `subagent_type` to get general-purpose), with two differences:
+Follow the subagent harness pattern in `.claude/skills/plan-creator/SKILL.md` § Step 2 (including: launch each research subagent with `subagent_type: "researcher"` and `model: "sonnet"`; NEVER use `subagent_type: "Explore"` — Explore agents cannot use the Write tool), with two differences:
 
 1. Use master-level research prompts from `references/research-prompts-master.md` — NOT plan-creator's `references/research-prompts.md`. Master prompts focus on breadth (scope enumeration, phase boundaries, ordering, branch-naming conventions) rather than depth (signatures, data shapes).
 2. Before launching, create `~/code/plans/<repo>/open/<parent-topic>/tmp/` (same as plan-creator).
 
-Subagents write their findings to `~/code/plans/<repo>/open/<parent-topic>/tmp/research-<focus>-master.md` and return a one-line confirmation.
+The four research areas run as **two agents**, each writing one file per area. **Agent A** covers 1 Scope Enumeration and 2 Natural Phase Boundaries, which read the same surface. **Agent B** covers 3 Ordering Dependencies and 4 Branch Naming Conventions; area 4 is a small git-history read. Agents write to `~/code/plans/<repo>/open/<parent-topic>/tmp/research-<focus>-master.md` and return one `Written to <path>` line per file.
 
 After subagents return, read each output file and compile findings for Step 4.
 
