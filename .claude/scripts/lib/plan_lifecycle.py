@@ -18,6 +18,20 @@ Commands (<repo> is a sub-repo DIRECTORY name or `stronghold`, mapped to a bucke
                                         closed issue on a still-open plan (ISSUE-CLOSED), an open issue awaiting an open
                                         PR (ISSUE-PENDING).
   sweep [<repo>] [--dry-run]            `git mv` every ORPHAN open/ topic to completed/ (skipped when completed/<topic> exists).
+  reconcile <repo> [<topic>] [--merged] [--dry-run]
+                                        keep master plans in sync with their sub-plans. For each master step (sub-plan found
+                                        by its **Sub-plan:** link, else by frontmatter `branch:` equal to the step's **Branch:**)
+                                        whose sub-plan says `finished: true`: tick the step's unmarked boxes and set
+                                        **Status:** done (PR repos: `done — awaiting merge (date)`); a no-PR bucket also
+                                        converts `(post-merge)` boxes. --merged (PR repos) also scans completed/ topics, looks
+                                        up the sub-plan branch's merged PR via gh and sets `merged — PR #N (date, sha)`,
+                                        ticking `(post-merge)` boxes. A sub-plan with `split_into:` (its branch was never
+                                        pushed) is merged only when EVERY part PR is, and gets `merged — PRs #A–#B (date, sha)`.
+                                        Never unticks; `(manual, post-merge)` is never touched.
+                                        Exit 1 when a named topic matches no master step.
+  backfill [--dry-run] [--only <rule>] [--force]
+                                        idempotent migration of every plan in the store to the plan schema (rules a-g, see
+                                        plan_backfill.py); skips dirty/untracked plan files unless --force; prints a per-rule summary.
   review-topic <repo> <name>            ensure plans/<bucket>/completed/<name>/{reviews,tmp} exists for a plan-less push
                                         review (an existing open/ or completed/ topic of that name is reused); prints its path.
 
@@ -32,6 +46,7 @@ Exit: 0 ok | 1 audit found drift | 2 usage | 3 topic not finishable | 4 unavaila
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import re
@@ -42,6 +57,8 @@ from pathlib import Path
 LIB_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB_DIR))
 
+import plan_backfill  # noqa: E402
+import plan_parse  # noqa: E402
 import wf_frontmatter  # noqa: E402
 import wf_lint_base as base  # noqa: E402
 
@@ -50,6 +67,7 @@ NUMBER_RE = re.compile(r"^[0-9]+$")
 SLUG_RE = re.compile(r"[:/]([^/:]+/[^/]+?)(?:\.git)?/?$")
 ISSUE_URL_RE = re.compile(r"github\.com/([^/\s]+/[^/\s]+)/(?:issues|pull)/[0-9]+")
 GH_TIMEOUT = 90
+NON_PLAN_TYPES = plan_backfill.NON_PLAN_TYPES
 
 OK, DRIFT, USAGE, UNFINISHED, UNAVAILABLE = 0, 1, 2, 3, 4
 
@@ -116,8 +134,15 @@ class Store:
             return []
 
     @staticmethod
-    def plan_files(topic: Path) -> list[Path]:
+    def topic_markdown(topic: Path) -> list[Path]:
+        """Every topic-root `*.md`, whatever its `type:` (unfiltered)."""
         return sorted(p for p in topic.glob("*.md") if p.is_file())
+
+    @staticmethod
+    def plan_files(topic: Path) -> list[Path]:
+        """Topic-root markdown that counts as a plan: skips only the six explicit non-plan types
+        (fail closed: untyped or unrecognised `type:` is a plan)."""
+        return [p for p in Store.topic_markdown(topic) if wf_frontmatter.parse(p).get("type") not in NON_PLAN_TYPES]
 
     def issue_of(self, plan: Path, bucket: str) -> int | None:
         """The plan's issue number; None when absent or when its `github_issue_url` names a different repo
@@ -310,7 +335,7 @@ def has_files(directory: Path) -> bool:
 def is_review_only(topic: Path) -> bool:
     """No plan file, a push review on disk, and no research/mocks (those mean a plan is still being written)."""
     return (
-        not Store.plan_files(topic)
+        not Store.topic_markdown(topic)
         and has_files(topic / "reviews")
         and not any(has_files(topic / name) for name in PLAN_IN_PROGRESS_DIRS)
     )
@@ -393,6 +418,272 @@ def cmd_review_topic(store: Store, args: argparse.Namespace) -> int:
     return OK
 
 
+# --- reconcile --------------------------------------------------------------------------------
+
+UNTICKED_RE = re.compile(r"^[ \t]*- \[ \]")
+MARKER_RE = re.compile(r"^([ \t]*- \[)[ xX~]")
+NON_BRANCHES = ("", "main", "none")
+
+
+def split_pr_numbers(plan: Path) -> list[int]:
+    """PR numbers in a plan's `split_into:` frontmatter key (inline list or block of `pr:`/bare items)."""
+    lines = plan.read_text().splitlines()
+    if not lines or lines[0].rstrip() != "---":
+        return []
+    chunk: list[str] = []
+    capturing = False
+    for line in lines[1:]:
+        if line.rstrip() == "---":
+            break
+        if line.startswith("split_into:"):
+            capturing = True
+            chunk.append(line.split(":", 1)[1])
+        elif capturing and line[:1] in (" ", "\t"):
+            chunk.append(line)
+        else:
+            capturing = False
+    text = "\n".join(chunk)
+    keyed = re.findall(r"\bpr:\s*(\d+)", text)
+    return sorted({int(n) for n in (keyed or re.findall(r"\d+", text))})
+
+
+def pr_label(numbers: list[int]) -> str:
+    if len(numbers) == 1:
+        return f"PR #{numbers[0]}"
+    if numbers == list(range(numbers[0], numbers[-1] + 1)):
+        return f"PRs #{numbers[0]}–#{numbers[-1]}"
+    return "PRs " + ", ".join(f"#{n}" for n in numbers)
+
+
+def field_line(lines: list[str], step: plan_parse.Step, regex: re.Pattern) -> int | None:
+    """1-based line of the first `regex` match inside the step body, outside fenced code blocks."""
+    fence: str | None = None
+    for number in range(step.start + 1, min(step.end, len(lines)) + 1):
+        line = lines[number - 1]
+        fenced = plan_parse.FENCE_RE.match(line)
+        if fence is not None:
+            if fenced and fenced.group(1)[0] == fence[0] and len(fenced.group(1)) >= len(fence):
+                fence = None
+            continue
+        if fenced:
+            fence = fenced.group(1)
+            continue
+        if regex.match(line):
+            return number
+    return None
+
+
+class Reconciler:
+    def __init__(self, store: Store, bucket: str, merged: bool, dry_run: bool) -> None:
+        self.store = store
+        self.bucket = bucket
+        self.merged = merged
+        self.dry_run = dry_run
+        self.no_pr = bucket in store.ctx.cfg["fixed_buckets"].values()
+        self.matched = 0
+        self.lookups_ok = 0
+        self.lookups_failed = 0
+        self.today = datetime.date.today().isoformat()
+        self._sub_lines: dict[Path, list[str]] = {}
+        self._sub_dirty: set[Path] = set()
+        self._lookups: dict[str, dict | None] = {}
+
+    def rel(self, path: Path) -> str:
+        try:
+            return str(path.relative_to(self.store.root))
+        except ValueError:
+            return str(path)
+
+    def tick(self, lines: list[str], path: Path, box: plan_parse.Box) -> bool:
+        if not UNTICKED_RE.match(lines[box.line - 1]):
+            return False
+        lines[box.line - 1] = MARKER_RE.sub(r"\1x", lines[box.line - 1], count=1)
+        verb = "would tick" if self.dry_run else "ticked    "
+        print(f"{verb}{' ' if self.dry_run else ''}{self.rel(path)}:{box.line} {box.text}")
+        return True
+
+    def sub_lines(self, path: Path) -> list[str]:
+        if path not in self._sub_lines:
+            self._sub_lines[path] = path.read_text(encoding="utf-8").splitlines()
+        return self._sub_lines[path]
+
+    def find_sub(self, master: Path, step: plan_parse.Step) -> Path | None:
+        link = step.sub_plan_link
+        if link and link != "none":
+            found = plan_parse.resolve_link(master, link)
+            if found.kind == "dangling":
+                print(f"note     {self.rel(master)}: step {step.n} sub-plan link `{link}` is dangling; left untouched")
+                return None
+            return found.path if found.path is not None and found.path.is_file() else None
+        branch = step.branch
+        if branch is None or branch in NON_BRANCHES:
+            return None
+        for candidate in Store.plan_files(master.parent):
+            if candidate != master and plan_parse.parse_plan(candidate).frontmatter.get("branch") == branch:
+                return candidate
+        return None
+
+    def merged_pr(self, branch: str) -> dict | None:
+        if branch in self._lookups:
+            return self._lookups[branch]
+        found: dict | None = None
+        try:
+            out = self.store.run_gh(
+                self.bucket, "pr", "list", "--repo", self.store.slug_for(self.bucket), "--head", branch,
+                "--state", "merged", "--limit", "20", "--json", "number,mergedAt,mergeCommit",
+            )
+            rows = [r for r in json.loads(out or "[]") if r.get("mergedAt")]
+            found = max(rows, key=lambda r: str(r["mergedAt"])) if rows else None
+            self.lookups_ok += 1
+        except (Unavailable, ValueError, TypeError, AttributeError) as exc:
+            print(f"note     merged-PR lookup for `{branch}` failed: {exc}", file=sys.stderr)
+            self.lookups_failed += 1
+        self._lookups[branch] = found
+        return found
+
+    def merged_split(self, prs: list[int]) -> dict | None:
+        key = "split:" + ",".join(map(str, prs))
+        if key in self._lookups:
+            return self._lookups[key]
+        found: dict | None = None
+        try:
+            rows = []
+            for number in prs:
+                out = self.store.run_gh(
+                    self.bucket, "pr", "view", str(number), "--repo", self.store.slug_for(self.bucket),
+                    "--json", "number,mergedAt,mergeCommit",
+                )
+                rows.append(json.loads(out or "{}"))
+            if rows and all(r.get("mergedAt") for r in rows):
+                last = max(rows, key=lambda r: str(r["mergedAt"]))
+                found = {**last, "label": pr_label(sorted(prs))}
+            self.lookups_ok += 1
+        except (Unavailable, ValueError, TypeError, AttributeError) as exc:
+            print(f"note     split-PR lookup for {prs} failed: {exc}", file=sys.stderr)
+            self.lookups_failed += 1
+        self._lookups[key] = found
+        return found
+
+    def convert_post_merge(self, lines: list[str], path: Path, boxes: list[plan_parse.Box]) -> bool:
+        changed = False
+        for box in boxes:
+            if box.state == "post-merge" and self.tick(lines, path, box):
+                changed = True
+        return changed
+
+    def set_status(self, lines: list[str], master: Path, step: plan_parse.Step, value: str) -> None:
+        text = f"**Status:** {value}"
+        number = field_line(lines, step, plan_parse.STATUS_RE)
+        if number is not None:
+            lines[number - 1] = text
+        else:
+            after = field_line(lines, step, plan_parse.BRANCH_RE) or field_line(lines, step, plan_parse.SUBPLAN_RE) or step.start
+            lines.insert(after, text)
+            number = after + 1
+        verb = "would set " if self.dry_run else "status    "
+        print(f"{verb}{self.rel(master)}:{number} {value}")
+
+    def reconcile_step(self, master: Path, step: plan_parse.Step, lines: list[str]) -> bool:
+        sub = self.find_sub(master, step)
+        if sub is None:
+            return False
+        sub_doc = plan_parse.parse_plan(sub)
+        if sub_doc.finished is not True:
+            return False
+        sub_boxes = [b for s in sub_doc.steps for b in s.boxes] + sub_doc.stray_boxes
+        current = step.status
+        new_status: str | None = None
+        if current is None or current.startswith(("todo", "in-progress")):
+            new_status = "done" if self.no_pr else f"done — awaiting merge ({self.today})"
+        effective = new_status or current or ""
+        convert = self.no_pr
+        if self.merged and not self.no_pr and effective.startswith(("done", "merged")):
+            settled = effective.startswith("merged") and not any(
+                b.state == "post-merge" for b in [*step.boxes, *sub_boxes]
+            )
+            branch = str(sub_doc.frontmatter.get("branch") or step.branch or "")
+            split_prs = split_pr_numbers(sub)
+            if settled:
+                hit = None
+            elif split_prs:
+                hit = self.merged_split(split_prs)
+            else:
+                hit = None if branch in NON_BRANCHES else self.merged_pr(branch)
+            if hit is not None:
+                convert = True
+                if effective.startswith("done"):
+                    commit = (hit.get("mergeCommit") or {}).get("oid") or ""
+                    sha = f", {commit[:7]}" if commit else ""
+                    label = hit.get("label") or f"PR #{hit['number']}"
+                    new_status = f"merged — {label} ({str(hit['mergedAt'])[:10]}{sha})"
+        changed = False
+        for box in step.boxes:
+            if box.state == "open" and self.tick(lines, master, box):
+                changed = True
+        if convert:
+            changed = self.convert_post_merge(lines, master, step.boxes) or changed
+            sub_lines = self.sub_lines(sub)
+            if self.convert_post_merge(sub_lines, sub, sub_boxes):
+                self._sub_dirty.add(sub)
+        if new_status is not None:
+            self.set_status(lines, master, step, new_status)
+            changed = True
+        return changed
+
+    def reconcile_master(self, master: Path) -> None:
+        doc = plan_parse.parse_plan(master)
+        if doc.effective_type == "orchestrator":
+            print(f"note     {self.rel(master)}: orchestrator master ignored")
+            return
+        if not (doc.type == "master" or (doc.type is None and "master" in master.stem.lower())):
+            return
+        if doc.legacy:
+            print(f"note     {self.rel(master)}: legacy plan ignored")
+            return
+        text = master.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        changed = False
+        # Last step first: a Status line inserted in one step must not shift the line numbers of earlier steps.
+        for step in reversed(doc.steps):
+            if step.sub_plan_link is None and step.branch is None:
+                continue
+            self.matched += 1
+            if self.reconcile_step(master, step, lines):
+                changed = True
+        if changed and not self.dry_run:
+            master.write_text("\n".join(lines) + ("\n" if text.endswith("\n") else ""), encoding="utf-8")
+
+    def flush(self) -> None:
+        if self.dry_run:
+            return
+        for path in self._sub_dirty:
+            original = path.read_text(encoding="utf-8")
+            path.write_text("\n".join(self._sub_lines[path]) + ("\n" if original.endswith("\n") else ""), encoding="utf-8")
+
+
+def cmd_reconcile(store: Store, args: argparse.Namespace) -> int:
+    bucket = store.bucket_for(args.repo)
+    rec = Reconciler(store, bucket, args.merged, args.dry_run)
+    for state in (STATES if args.merged else STATES[:1]):
+        for topic in store.topics(bucket, state):
+            if args.topic and topic.name != args.topic:
+                continue
+            for plan in store.plan_files(topic):
+                rec.reconcile_master(plan)
+    rec.flush()
+    if args.topic and rec.matched == 0:
+        print(f"note     no master step found for topic `{args.topic}`", file=sys.stderr)
+        return DRIFT
+    if rec.lookups_failed and not rec.lookups_ok:
+        return UNAVAILABLE
+    return OK
+
+
+def cmd_backfill(store: Store, args: argparse.Namespace) -> int:
+    rules = (args.only,) if args.only else plan_backfill.RULES
+    return plan_backfill.Backfill(store, rules, args.dry_run, args.force).run()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="plan-lifecycle.sh", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--stronghold", default=os.environ.get("STRONGHOLD_DIR") or str(LIB_DIR.parent.parent.parent))
@@ -411,6 +702,15 @@ def build_parser() -> argparse.ArgumentParser:
     sweep = sub.add_parser("sweep")
     sweep.add_argument("repo", nargs="?")
     sweep.add_argument("--dry-run", action="store_true")
+    reconcile = sub.add_parser("reconcile")
+    reconcile.add_argument("repo")
+    reconcile.add_argument("topic", nargs="?")
+    reconcile.add_argument("--merged", action="store_true")
+    reconcile.add_argument("--dry-run", action="store_true")
+    backfill = sub.add_parser("backfill")
+    backfill.add_argument("--dry-run", action="store_true")
+    backfill.add_argument("--only", choices=plan_backfill.RULES)
+    backfill.add_argument("--force", action="store_true")
     review = sub.add_parser("review-topic")
     review.add_argument("repo")
     review.add_argument("name")
@@ -422,6 +722,8 @@ COMMANDS = {
     "close-issues": cmd_close_issues,
     "audit": cmd_audit,
     "sweep": cmd_sweep,
+    "reconcile": cmd_reconcile,
+    "backfill": cmd_backfill,
     "review-topic": cmd_review_topic,
 }
 

@@ -7,6 +7,7 @@
 #   plan-lifecycle.sh close-issues <repo> [<topic>] [--dry-run] close the open issue of every completed plan
 #   plan-lifecycle.sh audit [<repo>]                            report completed plans with open issues + open topics with no plan
 #   plan-lifecycle.sh sweep [<repo>] [--dry-run]                move plan-less (review-only) open topics to completed/
+#   plan-lifecycle.sh backfill [--dry-run] [--only <rule>] [--force]  migrate the whole store to the plan schema (rules a-g)
 #   plan-lifecycle.sh review-topic <repo> <name>                create/reuse the topic folder for a plan-less push review
 #
 # <repo> is a sub-repo DIRECTORY name under the stronghold (or `stronghold`); the plans bucket comes only

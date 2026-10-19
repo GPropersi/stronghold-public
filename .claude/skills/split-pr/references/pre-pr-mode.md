@@ -16,6 +16,24 @@ part, unchanged from normal mode: Skill Step 4's prefix gate (one built/full-sta
 with parts 1…*k-1* merged in), Step 5c's `push-gate.sh` on each part's own HEAD, and Step 5g's CI on
 each part PR. Any gate failure STOPS the split (4d).
 
+## Handoff file (`--handoff <file>`)
+
+`/git-push` Step 7e writes `<plan-dir>/split/split-handoff.md` so this skill can start in a new
+session that has none of the push session's context. When `--handoff` is given:
+
+1. **Read the whole file first.** It supplies `<branch>` (so no branch argument is needed),
+   `<repo-dir>`, the worktree, the head SHA, the base, the plan and issue, and the gate and
+   push-review evidence. `cd ~/code/<repo-dir>` as its own Bash call before anything else (the
+   session starts in `~/code`).
+2. **Treat it as claims to verify, not evidence.** The Entry check below still runs unchanged:
+   `git rev-parse <branch>` must equal the file's head SHA, and `push-gate.sh --status <branch>` must
+   show `pass`/`na` for that SHA. A mismatch means a commit landed after `/git-push` (or the file is
+   stale): STOP and route back to `/git-push`.
+3. **Themes and part boundaries are advisory input** to the slice planner (Skill Step 2); the planner
+   still derives and justifies the split itself.
+4. **A `split-manifest.md` already beside the handoff means resume** (Skill Step 1b), not a fresh
+   start; the handoff file is then only context.
+
 ## Entry check (replaces Skill Steps 1a and 1c)
 
 1. **No PR may exist.** `GH_TOKEN=$(<token-generator>) gh pr view <branch>` must report no PR. If one

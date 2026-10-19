@@ -22,8 +22,13 @@ keeping the command both **token-cheap** and **accurate**:
   `open/` because its master topic isn't fully done is expected under the topic-as-unit lifecycle and
   is **not** flagged.
 - A plan counts as a **master** iff its filename ends in `-master.md`.
-- The GitHub issue is read from the `github_issue:` YAML frontmatter line; `(no issue)` flags a missing
-  link, not an error.
+- Only `type` plan, master or orchestrator is listed; typed non-plan docs (progress, prompt, runbook,
+  design, handoff, spec) are hidden, and files with no `type:` are still listed.
+- The GitHub issue is read from the `github_issue:` YAML frontmatter line and only a numeric value is an
+  issue: a number renders `#N` and counts as linked, `none` renders `(waived)`, and a missing, empty,
+  `null` or other value renders `(no issue)` (a flag, not an error).
+- A plan with unticked `(post-merge)` / `(manual, post-merge)` boxes or `[~]` deferred boxes gets a
+  `  held: P post-merge, D deferred` suffix (same words as `plan-status.sh`).
 - Coverage is topic-root `.md` under `<repo>/open/` and `<repo>/completed/` only; `reviews/`,
   `research/`, `mocks/`, `screenshots/`, `tmp/` subfolders and the standalone `<repo>/research/`
   bucket are excluded by depth.

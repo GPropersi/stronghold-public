@@ -11,6 +11,8 @@
 #   plan-status.sh <plan> --step next             print the first step that still has an unchecked box
 #   plan-status.sh <plan> --step N --with-context ... preceded by everything before the first step
 #                                                 (Summary, Research Findings, shared reference sections)
+#   plan-status.sh <plan> --verify                exit 0 when every unmarked box is ticked; else print one
+#                                                 `unticked: step N: <text>` line per open box, exit 5
 #
 #   <plan>  a path to the .md file, <repo>/<plan-name>, or a bare <plan-name>; names are looked up as
 #           $PLANS_DIR/<repo>/{open,completed}/<topic>/<plan-name>.md (open/ wins over completed/)
@@ -19,8 +21,14 @@
 # anywhere in the step's range. The outline also lists the plan's non-step sections with their line
 # ranges, so a section named like "reference for every step" can be read with sed -n 'a,bp'.
 #
+# Held items: `- [~]` (deferred) and an unticked `- [ ] (post-merge)` / `(manual, post-merge)` box are
+# excluded from done/total and from --verify; the outline reports them as `held: P post-merge, D deferred`
+# and a `+N held` suffix on the step row. A ticked tagged box is plain done. Fenced code blocks and the
+# `## Progress Tracking` section are never scanned or counted. --verify prints a `note:` and exits 0 for a
+# `legacy: true` plan or one with no parseable steps; it cannot be combined with --step/--with-context.
+#
 # Env (test seam): PLANS_DIR (default <stronghold>/plans)
-# Exit: 0 ok | 2 usage error | 3 ambiguous plan name | 4 plan or step not found
+# Exit: 0 ok | 2 usage error | 3 ambiguous plan name | 4 plan or step not found | 5 --verify found open boxes
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,6 +43,7 @@ die() {
 plan_arg=""
 step=""
 with_context=0
+verify=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -h | --help)
@@ -50,6 +59,10 @@ while [ "$#" -gt 0 ]; do
       with_context=1
       shift
       ;;
+    --verify)
+      verify=1
+      shift
+      ;;
     -*) die "unknown option '$1'" ;;
     *)
       [ -z "$plan_arg" ] || die "unexpected argument '$1'"
@@ -58,7 +71,10 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
-[ -n "$plan_arg" ] || die "usage: plan-status.sh <plan> [--step N|next] [--with-context]"
+[ -n "$plan_arg" ] || die "usage: plan-status.sh <plan> [--step N|next] [--with-context] | --verify"
+if [ "$verify" -eq 1 ] && { [ -n "$step" ] || [ "$with_context" -eq 1 ]; }; then
+  die "--verify cannot be combined with --step or --with-context (usage: plan-status.sh <plan> --verify)"
+fi
 if [ -n "$step" ] && [ "$step" != "next" ]; then
   case "$step" in '' | *[!0-9]*) die "--step must be a number or 'next'" ;; esac
 fi
@@ -104,18 +120,20 @@ plan="$(resolve_plan "$plan_arg")"
 total_lines="$(wc -l <"$plan" | tr -d ' ')"
 
 # One awk pass: frontmatter, step table, non-step sections, checkbox counts.
-# Emits tab-separated records: FM key value | STEP n start end done total title | SEC start end title | TOT done total
+# Emits tab-separated records: FM key value | STEP n start end done total title held | SEC start end title
+#   | OPEN label text | TOT done total | HELD post-merge deferred
+# Fenced code blocks and the `## Progress Tracking` section are skipped for headings, boxes and finished:.
 parsed="$(
   awk '
     function flush_step() {
       if (cur_n != "") {
-        printf "STEP\t%s\t%d\t%d\t%d\t%d\t%s\n", cur_n, cur_start, NR_end, cur_done, cur_total, cur_title
+        printf "STEP\t%s\t%d\t%d\t%d\t%d\t%s\t%d\n", cur_n, cur_start, NR_end, cur_done, cur_total, cur_title, cur_held
       }
     }
     function flush_sec() {
       if (sec_title != "") { printf "SEC\t%d\t%d\t%s\n", sec_start, NR_end, sec_title }
     }
-    BEGIN { infm = 0; fmdone = 0; cur_n = ""; sec_title = "" }
+    BEGIN { infm = 0; fmdone = 0; cur_n = ""; sec_title = ""; fence = ""; in_pt = 0; held_pm = 0; held_df = 0 }
     NR == 1 && $0 == "---" { infm = 1; next }
     infm == 1 {
       if ($0 == "---") { infm = 0; fmdone = 1; next }
@@ -125,10 +143,21 @@ parsed="$(
       }
       next
     }
+    match($0, /^[ \t]*([`][`][`]+|[~][~][~]+)/) {
+      f = substr($0, 1, RLENGTH); sub(/^[ \t]+/, "", f)
+      if (fence == "") { fence = f }
+      else if (substr(f, 1, 1) == substr(fence, 1, 1) && length(f) >= length(fence)) { fence = "" }
+      next
+    }
+    fence != "" { next }
     /^finished:/ { val = $0; sub(/^finished:[ \t]*/, "", val); printf "FM\tfinished\t%s\n", val }
     {
-      is_step = ($0 ~ /^###[ \t]+(Step[ \t]+)?[0-9]+[.:)][ \t]/)
       is_h2 = ($0 ~ /^##[ \t]/)
+      if (is_h2) {
+        t = $0; sub(/^##[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
+        in_pt = (tolower(t) == "progress tracking")
+      }
+      is_step = (!in_pt && $0 ~ /^###[ \t]+(Step[ \t]+)?[0-9]+[.:)][ \t]/)
       if (is_step || is_h2) {
         NR_end = NR - 1
         flush_step(); cur_n = ""
@@ -137,24 +166,36 @@ parsed="$(
           t = $0; sub(/^###[ \t]+(Step[ \t]+)?/, "", t)
           cur_n = t; sub(/[.:)].*$/, "", cur_n)
           sub(/^[0-9]+[.:)][ \t]+/, "", t)
-          cur_title = t; cur_start = NR; cur_done = 0; cur_total = 0
+          cur_title = t; cur_start = NR; cur_done = 0; cur_total = 0; cur_held = 0
         } else {
           sec_title = $0; sub(/^##[ \t]+/, "", sec_title); sec_start = NR
         }
       }
-      if ($0 ~ /^[ \t]*- \[[ xX]\]/) {
-        if (cur_n != "") {
-          cur_total++
-          if ($0 ~ /^[ \t]*- \[[xX]\]/) cur_done++
+      if (!in_pt && match($0, /^[ \t]*- \[[ xX~]\]/)) {
+        marker = substr($0, RLENGTH - 1, 1)
+        text = substr($0, RLENGTH + 1); sub(/^[ \t]+/, "", text)
+        if (marker == "~") {
+          held_df++
+          if (cur_n != "") cur_held++
+        } else if (marker == " " && (text ~ /^\(post-merge\)/ || text ~ /^\(manual,[ \t]*post-merge\)/)) {
+          held_pm++
+          if (cur_n != "") cur_held++
+        } else {
+          if (cur_n != "") {
+            cur_total++
+            if (marker != " ") cur_done++
+          }
+          all_total++
+          if (marker != " ") all_done++
+          else printf "OPEN\t%s\t%s\n", (cur_n != "" ? "step " cur_n : "(no step)"), text
         }
-        all_total++
-        if ($0 ~ /^[ \t]*- \[[xX]\]/) all_done++
       }
     }
     END {
       NR_end = NR
       flush_step(); flush_sec()
       printf "TOT\t%d\t%d\n", all_done + 0, all_total + 0
+      printf "HELD\t%d\t%d\n", held_pm + 0, held_df + 0
     }
   ' "$plan"
 )"
@@ -164,6 +205,25 @@ fm() { printf '%s\n' "$parsed" | awk -F'\t' -v k="$1" '$1 == "FM" && $2 == k {v 
 # The last step runs only to the end of its section: stop at the next `## ` heading.
 # (awk flushes a step at the next heading, so ranges already end before it.)
 step_rows="$(printf '%s\n' "$parsed" | awk -F'\t' '$1 == "STEP"')"
+
+if [ "$verify" -eq 1 ]; then
+  legacy="$(fm legacy | tr -d "'\" \t" | tr '[:upper:]' '[:lower:]')"
+  if [ "$legacy" = "true" ]; then
+    echo "note: legacy plan (legacy: true), step checks skipped"
+    exit 0
+  fi
+  if [ -z "$step_rows" ]; then
+    echo "note: no parseable steps in $plan, nothing to verify"
+    exit 0
+  fi
+  open_rows="$(printf '%s\n' "$parsed" | awk -F'\t' '$1 == "OPEN" {print "unticked: " $2 ": " $3}')"
+  if [ -n "$open_rows" ]; then
+    printf '%s\n' "$open_rows"
+    exit 5
+  fi
+  echo "verify: ok"
+  exit 0
+fi
 
 if [ -n "$step" ]; then
   [ -n "$step_rows" ] || die "no steps found in $plan" 4
@@ -199,13 +259,18 @@ echo "$fm_line"
 
 tot_done="$(printf '%s\n' "$parsed" | awk -F'\t' '$1 == "TOT" {print $2}')"
 tot_all="$(printf '%s\n' "$parsed" | awk -F'\t' '$1 == "TOT" {print $3}')"
+held_pm="$(printf '%s\n' "$parsed" | awk -F'\t' '$1 == "HELD" {print $2}')"
+held_df="$(printf '%s\n' "$parsed" | awk -F'\t' '$1 == "HELD" {print $3}')"
 n_steps="$(printf '%s\n' "$step_rows" | grep -c . || true)"
 next_n="$(printf '%s\n' "$step_rows" | awk -F'\t' '$6 > $5 {print $2; exit}')"
 echo "progress: $tot_done/$tot_all checked, $n_steps steps, next incomplete: ${next_n:-none}"
+if [ $((held_pm + held_df)) -gt 0 ]; then
+  echo "held: $held_pm post-merge, $held_df deferred"
+fi
 
 if [ -n "$step_rows" ]; then
   echo "steps (# lines done title):"
-  printf '%s\n' "$step_rows" | awk -F'\t' '{printf "  %-3s %-9s %-7s %s\n", $2, $3 "-" $4, $5 "/" $6, $7}'
+  printf '%s\n' "$step_rows" | awk -F'\t' '{printf "  %-3s %-9s %-7s %s%s\n", $2, $3 "-" $4, $5 "/" $6, $7, ($8 > 0 ? " +" $8 " held" : "")}'
 fi
 sections="$(printf '%s\n' "$parsed" | awk -F'\t' '$1 == "SEC" {printf "  %-9s %s\n", $2 "-" $3, $4}')"
 if [ -n "$sections" ]; then

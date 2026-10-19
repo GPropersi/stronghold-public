@@ -128,16 +128,16 @@ Store `<plan-dir>` and `<tmp-dir>` for use in all subagent prompts below.
 The plan file's YAML frontmatter (written by `/plan-creator` Step 4e) carries the GitHub issue number used to close the issue on PR merge.
 
 1. Locate the canonical plan file: glob `<plan-dir>/*.md`, excluding `*-master.md` and anything under `<plan-dir>/reviews/`. If exactly one match, that's `<plan-file>`. If multiple, pick the one whose name most closely matches `$BRANCH`. If zero matches, skip to Step 2d.
-2. Read the first ~20 lines of `<plan-file>`. If `github_issue:` is present in the YAML frontmatter, capture:
-   - `<plan-issue-number>` — the integer
-   - `<plan-issue-url>` — from the `github_issue_url:` line
+2. Read the first ~20 lines of `<plan-file>`. Capture, unconditionally:
    - **`<plan-branch>`** — from the `branch:` line, if present. If it is set and does **not** equal `$BRANCH` (the branch you are about to push), STOP and surface it via `AskUserQuestion`: the plan expects branch `<plan-branch>` but you are on `$BRANCH` — this usually means a branch drifted mid-run (work landed on a stray/renamed branch). Offer: (a) push `$BRANCH` anyway and update the plan's `branch:` to match, (b) switch to the plan's worktree (`git -C <worktree> …`) and push `<plan-branch>` from there (offer this only when a `worktree:` frontmatter value exists and is verified against `git -C ~/code/<repo> worktree list --porcelain`; use bare `git ...` instead when `~/code/<repo>` is already the cwd — a redundant `-C` is blocked by a hook), or (c) abort. Never check out `<plan-branch>` to resolve the mismatch. Do not silently push the mismatched branch. (Canonical rule: CLAUDE.md → Worktree Discipline.)
-3. Also glob `<plan-dir>/*-master.md`. If exactly one match and its frontmatter contains `github_issue:`, capture `<master-issue-number>`. Otherwise skip the umbrella check.
+
+   Issue capture is numeric-only: only a numeric `github_issue:` value is an issue. When it is numeric, capture `<plan-issue-number>` (the integer) and `<plan-issue-url>` (from the `github_issue_url:` line). `github_issue: none` is the explicit waiver: capture nothing, add no `Closes` line, do NOT trigger Step 2d, and print no warning. An empty, `null` or other non-numeric value also captures nothing and surfaces the same final-report warning as a missing key, also without Step 2d.
+3. Also glob `<plan-dir>/*-master.md`. If exactly one match and its frontmatter has a numeric `github_issue:` (never `none`), capture `<master-issue-number>`. Otherwise skip the umbrella check.
 4. If `<master-issue-number>` was captured, determine whether this is the **final phase**:
    - Read the master plan. For each `**Branch:**` line (excluding the verification phase), find the corresponding sub-plan file within the same topic cluster in the central store (`<plan-dir>`, i.e. `~/code/plans/<repo>/{open,completed}/<topic>/`; master + its sub-plans share one topic folder). Read each sub-plan's `## Status` block.
    - If every phase except the current one has `finished: true`, set `<is-final-phase>=true`. Otherwise `<is-final-phase>=false`.
 
-These values feed into the PR body in Step 9. If 2c found a `<plan-file>` with no `github_issue:` line, do NOT trigger Step 2d — the plan exists but was created before this convention (or the issue creation failed in `/plan-creator`); surface a warning in the final report instead.
+These values feed into the PR body in Step 9. If 2c found a `<plan-file>` with no `github_issue:` line (or an empty/`null`/non-numeric value), do NOT trigger Step 2d — the plan exists but was created before this convention (or the issue creation failed in `/plan-creator`); surface a warning in the final report instead. `github_issue: none` needs no warning.
 
 ### 2d. Auto-Create Issue for No-Plan PRs
 
@@ -494,8 +494,21 @@ git diff origin/main...HEAD --numstat -- . ':(exclude)*.lock' ':(exclude)package
 
 Sum the added and deleted columns (changed lines). **Rough ceiling: about 1500 changed lines.** The real goal is thematic, modular PRs (one coherent concern each), so file count is not a limit; list the files only to help judge themes. Under the ceiling: continue silently to Step 8. Over it: surface it via `AskUserQuestion` (`header: "PR size"`) showing the line total, file and commit counts, and the distinct themes you can see (largest directories and commit subjects), with these options (first one recommended):
 
-- **Split now (Recommended)** — skip Steps 8, 9 and 9b (no push, no PR for the whole branch), run Step 10 (sync) so the review file is kept, then invoke `/split-pr <branch> --pre-pr` and let it run. A split only moves already-reviewed code (its union invariant proves the parts reproduce the reviewed tree exactly), so it never re-runs this skill's reviews; it re-proves the tests instead, with a full gate per part (each prefix of the merge order) plus `push-gate.sh` and CI on every part PR, then ships the parts one at a time, each squash-merged before the next is cut. This step's gate result for HEAD is its entry evidence, so make no commit between Step 7d and the handoff.
+- **Split in a new session (Recommended)** — skip Steps 8, 9 and 9b (no push, no PR for the whole branch), write the handoff file below, run Step 10 (sync) so the review file and the handoff are kept, then STOP and print the exact command from "Handoff file" for the user to run in a fresh session. Do not invoke `/split-pr` yourself: this session's context is already full of review rounds, and a split is a long multi-part run that deserves a clean one.
+- **Split now, in this session** — same skips, same handoff file and Step 10 sync (so a crash is resumable), then invoke `/split-pr --pre-pr --handoff <handoff-path>` and let it run.
 - **Push as one PR anyway** — continue to Step 8 and note the size and the user's decision in the PR body's Summary.
+
+A split only moves already-reviewed code (its union invariant proves the parts reproduce the reviewed tree exactly), so it never re-runs this skill's reviews; it re-proves the tests instead, with a full gate per part (each prefix of the merge order) plus `push-gate.sh` and CI on every part PR, then ships the parts one at a time, each squash-merged before the next is cut. This step's gate result for HEAD is its entry evidence, so make no commit between Step 7d and the handoff.
+
+**Handoff file.** Both split options write `<plan-dir>/split/split-handoff.md` (`<plan-dir>` = the same folder the review file lives under, including a plan-less push's `review-topic` folder; create `split/` if absent). It is a stronghold-tracked write, so it goes out with Step 10's sync. It is NOT `split-manifest.md` (whose existence makes `/split-pr` resume instead of start). It must let a session with zero context from this one start the split, so write it self-contained:
+
+- `Run:` the literal command, `/split-pr --pre-pr --handoff ~/code/plans/<repo>/<open|completed>/<topic>/split/split-handoff.md` (absolute-from-`~` path; the branch is read from the file, so no branch argument)
+- Identity: `repo-dir`, `branch`, `worktree` (absolute path; or "primary clone" in the fallback), `head SHA` (literal 40 characters), `base` (default branch plus the `origin/<default>` SHA the size check diffed against), plan path, issue number if any
+- Entry evidence: push-gate result file path, status and suites with counts for exactly that head SHA; the push-review file path, final verdict and round count
+- Size: changed-line total, file and commit counts, the themes you saw (largest directories, commit subjects) and any suggested part boundaries, labelled **advisory — the slice planner decides**
+- `Do not:` commit anything to the branch, push it, or open a PR for it before the split (any new commit invalidates the gate evidence)
+
+Then print to the user, as its own copyable code block: `cd ~/code` (the fresh session's cwd), and the `Run:` line. Never rely on this conversation's context being available to the split session.
 
 The ceiling is a rough warning, not a gate: a single coherent theme (a migration, a mechanical rename, a large test suite) can legitimately exceed it, and a PR well under it that mixes unrelated themes is also worth flagging. Never split, reorder or rewrite commits yourself in this step; `/split-pr` owns that.
 

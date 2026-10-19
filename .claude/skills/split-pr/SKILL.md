@@ -1,6 +1,6 @@
 ---
 name: split-pr
-argument-hint: [PR# or branch] [--pre-pr]
+argument-hint: [PR# or branch] [--pre-pr] [--handoff <file>]
 description: Decompose one oversized, already-green PR into N smaller PRs that merge sequentially. Use for "split this PR", "this PR is too big". HARD PRECONDITION - only after /git-push opened the PR and its CI is fully green (failing goes to /pr-review-fixer), or as /git-push Step 7e's pre-PR handoff (--pre-pr) for a reviewed branch whose push gate passed at HEAD.
 ---
 
@@ -21,7 +21,9 @@ Neither is knowable before CI runs, which is why this is a post-push skill and n
 **Pre-PR mode (`--pre-pr`):** `/git-push` Step 7e hands off a reviewed branch whose push gate passed at
 HEAD; that gate result stands in for green CI and nothing is re-reviewed. The parts still ship one at
 a time through Steps 4-5. Its deltas to Steps 1a, 1c, 1e, 5d, 5e, 6a and 6b live in
-`references/pre-pr-mode.md`; read it first in that mode.
+`references/pre-pr-mode.md`; read it first in that mode. `--handoff <file>` (pre-PR only) names the
+`split-handoff.md` that `/git-push` Step 7e wrote so a fresh session can start with no other context;
+it supplies the branch, repo-dir and entry evidence (see "Handoff file" in that reference).
 
 > **Repo-agnostic.** This skill reads the working repo's `## Claude Config` section (schema in
 > `~/code/CLAUDE.md`) for every repo-specific value — **Repo slug**, **Default branch**, **Token

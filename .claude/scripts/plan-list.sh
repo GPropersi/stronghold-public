@@ -22,6 +22,14 @@
 # `github_issue:` YAML frontmatter line. Only topic-root `.md` files count;
 # reviews/, research/, mocks/, screenshots/, tmp/ subfolders are excluded by depth.
 #
+# Doc type: a frontmatter `type:` of progress|prompt|runbook|design|handoff|spec
+# hides the file (not a plan); a file with no `type:` or any other value is listed.
+# Issue: a numeric `github_issue:` renders `#N` and counts as linked, `none` renders
+# `(waived)`, anything else (absent, empty, null, other text) renders `(no issue)`.
+# Held items: a plan with unticked `(post-merge)` / `(manual, post-merge)` boxes or
+# `[~]` (deferred) boxes gets a `  held: P post-merge, D deferred` suffix. Fenced code
+# blocks and the `## Progress Tracking` section are never counted (as in plan-status.sh).
+#
 # One awk pass emits a TSV row per plan; no file contents leave the script.
 set -euo pipefail
 
@@ -57,18 +65,26 @@ done
 rows="$(find "$PLANS_DIR" -mindepth 3 -maxdepth 4 -type f -name '*.md' \
   \( -path '*/open/*' -o -path '*/completed/*' \) \
   -exec awk -v plans="$PLANS_DIR" -v repofilter="$repo_filter" -v openonly="$open_only" '
-    function emit(   stateord, mism) {
+    function emit(   stateord, mism, iss, heldtxt) {
       if (!seen) return
       if (repofilter != "" && repo != repofilter) return
       if (openonly == 1 && state != "open") return
+      # Typed non-plan docs are hidden; untyped or unrecognised types stay listed.
+      if (type ~ /^(progress|prompt|runbook|design|handoff|spec)$/) return
       stateord = (state == "open") ? 0 : 1
       # Only the confusing direction is real drift: a plan filed under completed/
       # but still marked `finished: false`. The reverse (a finished sub-plan sitting
       # in open/ because its master topic is not fully done) is expected under the
       # topic-as-unit lifecycle, so it is NOT flagged.
       mism = (state == "completed" && finished == "false") ? 1 : 0
-      printf "%s\t%d\t%s\t%d\t%s\t%s\t%s\t%s\t%d\n", \
-        repo, stateord, state, master, topic, name, issue, finished, mism
+      # Only a numeric issue is a real issue; `none` is the explicit waiver.
+      iss = ""
+      if (issue ~ /^[0-9]+$/) iss = issue
+      else if (issue == "none") iss = "none"
+      heldtxt = ""
+      if (held_pm + held_df > 0) heldtxt = sprintf("held: %d post-merge, %d deferred", held_pm, held_df)
+      printf "%s\t%d\t%s\t%d\t%s\t%s\t%s\t%s\t%d\t%s\n", \
+        repo, stateord, state, master, topic, name, iss, finished, mism, heldtxt
     }
     FNR == 1 {
       emit()
@@ -80,10 +96,31 @@ rows="$(find "$PLANS_DIR" -mindepth 3 -maxdepth 4 -type f -name '*.md' \
       name = c[n]; sub(/\.md$/, "", name)
       master = (name ~ /-master$/) ? 1 : 0
       issue = ""; finished = "NONE"; instatus = 0
+      type = ""; infm = ($0 == "---") ? 1 : 0
+      fence = ""; in_pt = 0; held_pm = 0; held_df = 0
     }
+    FNR > 1 && infm == 1 && $0 == "---" { infm = 0 }
+    infm == 1 && /^type:[[:space:]]*/ && type == "" { type = $2 }
+    match($0, /^[ \t]*([`][`][`]+|[~][~][~]+)/) {
+      f = substr($0, 1, RLENGTH); sub(/^[ \t]+/, "", f)
+      if (fence == "") { fence = f }
+      else if (substr(f, 1, 1) == substr(fence, 1, 1) && length(f) >= length(fence)) { fence = "" }
+      next
+    }
+    fence != "" { next }
     /^github_issue:[[:space:]]*/ { if (issue == "") issue = $2 }
     /^##[[:space:]]+Status/ { instatus = 1 }
+    /^##[[:space:]]/ {
+      t = $0; sub(/^##[[:space:]]+/, "", t); sub(/[[:space:]]+$/, "", t)
+      in_pt = (tolower(t) == "progress tracking")
+    }
     instatus == 1 && /^finished:[[:space:]]*/ && finished == "NONE" { finished = $2 }
+    !in_pt && match($0, /^[ \t]*- \[[ xX~]\]/) {
+      marker = substr($0, RLENGTH - 1, 1)
+      text = substr($0, RLENGTH + 1); sub(/^[ \t]+/, "", text)
+      if (marker == "~") held_df++
+      else if (marker == " " && (text ~ /^\(post-merge\)/ || text ~ /^\(manual,[ \t]*post-merge\)/)) held_pm++
+    }
     END { emit() }
   ' {} + | sort -t"$(printf '\t')" -k1,1 -k2,2n -k5,5 -k4,4n -k6,6)"
 
@@ -101,19 +138,22 @@ echo "$title"
 
 printf '%s\n' "$rows" | awk -F'\t' '
   {
-    repo=$1; state=$3; master=$4; topic=$5; name=$6; issue=$7; finished=$8; mism=$9
+    repo=$1; state=$3; master=$4; topic=$5; name=$6; issue=$7; finished=$8; mism=$9; held=$10
     if (repo != crepo) { crepo=repo; cstate=""; printf "\n## %s\n", repo }
     if (state != cstate) { cstate=state; printf "### %s\n", (state=="open" ? "Open" : "Completed") }
     box = (state=="completed") ? "x" : " "
     mt = (master==1) ? "  (master)" : ""
-    it = (issue=="") ? "  (no issue)" : "  #" issue
+    if (issue ~ /^[0-9]+$/) it = "  #" issue
+    else if (issue == "none") it = "  (waived)"
+    else it = "  (no issue)"
+    ht = (held != "") ? "  " held : ""
     mm = (mism==1) ? "  [!] folder/finished mismatch (finished: " finished ")" : ""
-    printf "  - [%s] %s/%s%s%s%s\n", box, topic, name, mt, it, mm
+    printf "  - [%s] %s/%s%s%s%s%s\n", box, topic, name, mt, it, ht, mm
     total++
     if (state=="open") open++; else done++
-    if (issue!="") linked++
+    if (issue ~ /^[0-9]+$/) linked++
     if (mism==1) { mismn++; misslist[mismn]=repo "/" state "/" topic "/" name " (finished: " finished ")" }
-    if (state=="open") { notdone++; ndlist[notdone]=sprintf("  - [ ] %s/%s%s%s  · %s", topic, name, mt, it, repo) }
+    if (state=="open") { notdone++; ndlist[notdone]=sprintf("  - [ ] %s/%s%s%s%s  · %s", topic, name, mt, it, ht, repo) }
   }
   END {
     printf "\nTotal: %d plans — %d completed, %d open · %d/%d linked to a GitHub issue\n", \

@@ -113,6 +113,7 @@ Inject `repo: <repo>` YAML frontmatter at the top of the file (alongside any oth
 ```markdown
 ---
 repo: <repo>
+type: design
 ---
 
 # <Feature Name> — Design Doc

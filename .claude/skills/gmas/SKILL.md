@@ -130,6 +130,10 @@ Skip any branches the user did not check.
 
 Merges are what close most issues, but an umbrella or a multi-PR plan can leave one open. Run `~/code/.claude/scripts/plan-lifecycle.sh close-issues <repo-dir>` as its own standalone Bash call (`<repo-dir>` = basename of the primary checkout; from a linked worktree, the path segment before `/.claude/worktrees/`). It is deterministic and safe to run unconditionally: it closes only the open issue of a plan already in `completed/`, and leaves any issue still named by a plan in `open/` or by an open PR's closing references. Exit 4 (no `Plans bucket`, or `gh` unavailable) is non-fatal here: note it in the report and continue.
 
+### 5c. Reconcile plans whose PRs merged
+
+For each repo cleaned in 5b, run `~/code/.claude/scripts/plan-lifecycle.sh reconcile <repo-dir> --merged` as its own standalone Bash call. It ticks `(post-merge)` boxes and promotes master Status lines for merged PRs. Failures are non-fatal, like 5b: note them and continue. When it printed any `ticked` or `status` line, finish with `.claude/scripts/stronghold-sync.sh "plans(<repo>): reconcile merged"` as its own call, because the reconcile edits plan files in the stronghold and would otherwise sit uncommitted.
+
 ### 6. Report
 
 One-line summary:

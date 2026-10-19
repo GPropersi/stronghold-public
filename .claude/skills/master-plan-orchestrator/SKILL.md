@@ -94,6 +94,8 @@ Use exactly this structure:
 ```markdown
 ---
 repo: <repo>
+type: orchestrator
+github_issue: none
 ---
 # <Title>
 
@@ -126,7 +128,7 @@ finished: false
 ```
 
 **Rules:**
-- Include the `repo: <repo>` YAML frontmatter block at the very top (using the `<repo>` resolved from the seam's **Repo slug**). Step 8's `github_issue:` / `github_issue_url:` keys get merged into this same frontmatter block.
+- Include the `repo: <repo>` YAML frontmatter block at the very top (using the `<repo>` resolved from the seam's **Repo slug**). Also write `type: orchestrator` and a `github_issue: none` placeholder; Step 8 replaces the placeholder with `github_issue: <N>` (or leaves `none` if issue creation fails) and merges `github_issue_url:` into this same block. The key is never absent. Definition of done includes: tick every master to-do and `plan-status.sh <repo>/<name>-master --verify` passes.
 - Exactly **one** `**Branch:**` line, directly under the title — never per-step. This is the load-bearing difference from `/master-plan-creator`'s output; get it right.
 - To-dos stay coarse (same rationale as `/master-plan-creator`: sub-plan-elaboration territory) but are understood to be elaborated by the orchestrator inline, not by a separate `/plan-creator` invocation.
 - Do NOT include TDD Enforcement, Package Pinning, Dead Import Elimination, Function Signature Change, or Frontend/Backend Colocation sections — those protocols are already codified in this repo's `CLAUDE.md`, and the execution prompt (Step 7) tells the orchestrator to follow it exactly during each phase's inline elaboration.
@@ -173,7 +175,7 @@ If a design doc exists (Step 2a), reuse its Problem/Why/Outcome sections **verba
 issue body instead of re-deriving them from Research Findings — the design doc is the source of
 truth for what/why; Research Findings only inform phasing, which isn't issue-body content.
 
-Write `github_issue:` / `github_issue_url:` YAML frontmatter into `<name>-master.md` only (merged into its existing `repo: <repo>` frontmatter block; not the execution-prompt file — that file references the issue by number inline in its template, not via frontmatter).
+Write `github_issue:` / `github_issue_url:` YAML frontmatter into `<name>-master.md` only (replacing the `github_issue: none` placeholder, merged into its existing `repo: <repo>` / `type: orchestrator` frontmatter block; not the execution-prompt file — that file references the issue by number inline in its template, not via frontmatter).
 
 ## Step 9: Cleanup & Summary
 

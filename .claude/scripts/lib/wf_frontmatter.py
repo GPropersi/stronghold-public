@@ -3,6 +3,7 @@
 
 parse(path) -> dict holding only the keys that are present, from:
   repo branch worktree github_issue github_issue_url   (leading `---` frontmatter only)
+  type legacy                                          (legacy -> bool; type stays a raw string)
   finished                                             (bool, from the BODY's `## Status` block)
 Absent frontmatter and no Status block gives {}. Missing/unreadable files give {}.
 CLI: python3 wf_frontmatter.py <plan.md>  prints the dict as JSON.
@@ -15,7 +16,15 @@ import re
 import sys
 from pathlib import Path
 
-FRONTMATTER_KEYS = ("repo", "branch", "worktree", "github_issue", "github_issue_url")
+FRONTMATTER_KEYS = (
+    "repo",
+    "branch",
+    "worktree",
+    "github_issue",
+    "github_issue_url",
+    "type",
+    "legacy",
+)
 FINISHED_RE = re.compile(r"^finished:\s*(true|false)\s*$", re.IGNORECASE)
 
 
@@ -48,7 +57,11 @@ def parse(path: str | Path) -> dict:
         key, sep, value = line.partition(":")
         key = key.strip()
         if sep and key in FRONTMATTER_KEYS:
-            result[key] = _unquote(value)
+            value = _unquote(value)
+            if key == "legacy":
+                result[key] = value.lower() == "true"
+            else:
+                result[key] = value
     in_status = False
     for line in body:
         if line.startswith("## "):

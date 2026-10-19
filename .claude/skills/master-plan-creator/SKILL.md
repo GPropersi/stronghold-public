@@ -81,6 +81,8 @@ Use exactly this structure:
 ```markdown
 ---
 repo: <repo>
+type: master
+github_issue: none
 ---
 
 # <Title>
@@ -96,7 +98,11 @@ repo: <repo>
 ### 1. <Phase title>
 <One sentence describing what this phase accomplishes.>
 
+**Sub-plan:** none
+
 **Branch:** `<branch-name>`
+
+**Status:** todo
 
 **To-do:**
 - [ ] <Coarse bullet — a sub-plan will elaborate this into detailed tasks>
@@ -112,7 +118,7 @@ finished: false
 ```
 
 **Rules:**
-- Every step MUST have a `**Branch:**` line with a backtick-quoted branch name.
+- Every step MUST have a `**Branch:**` line with a backtick-quoted branch name, a `**Sub-plan:** none` placeholder (`/plan-creator` replaces it with the link) and a `**Status:** todo` line (vocabulary: `todo|in-progress|done|merged|moved`, lowercase).
 - To-dos are intentionally coarse — they name the work, not every file. Sub-plans elaborate.
 - Do NOT include TDD Enforcement, Package Pinning, Dead Import Elimination, Function Signature Change, or Frontend/Backend Colocation sections. Those belong in sub-plans (`/plan-creator` enforces them).
 - Do NOT include any test-verification step (per-phase OR a final umbrella one). Each sub-plan already runs the working repo's full suites (its **Commands** table — integration / UI / JS-unit tests) as its last step, so the master needs no separate verification phase.
@@ -123,8 +129,9 @@ finished: false
 Before reporting success, verify:
 1. Every step has a `**Branch:**` line matching the pattern `\*\*Branch:\*\* \`[^\`]+\``. Use Grep on the master plan file.
 2. The `## Status` block is present with `finished: false`.
+3. Every step has the three block fields `**Sub-plan:**`, `**Branch:**` and `**Status:**`.
 
-If any check fails, fix the plan file. Do not proceed to Step 7 until both pass.
+If any check fails, fix the plan file. Do not proceed to Step 7 until all pass.
 
 ## Step 7: Create Umbrella Issue
 
@@ -186,11 +193,12 @@ While doing so you fetch the umbrella issue's GraphQL node ID. **Capture it as `
 
 ### 7d. Write frontmatter
 
-Merge these keys into the existing YAML frontmatter at the top of `~/code/plans/<repo>/open/<parent-topic>/<name>-master.md` (the `repo: <repo>` key from Step 5 is already there — add alongside it, do not replace it):
+Update the existing YAML frontmatter at the top of `~/code/plans/<repo>/open/<parent-topic>/<name>-master.md` (the `repo:`, `type: master` and `github_issue: none` placeholder from Step 5 are already there): replace the `github_issue: none` placeholder line with the umbrella number (never a duplicate `github_issue` key) and add the url and node-id keys, only when a numeric umbrella number exists:
 
 ```yaml
 ---
 repo: <repo>
+type: master
 github_issue: <N>
 github_issue_url: <url>
 github_issue_node_id: <umbrella-node-id>
@@ -206,7 +214,7 @@ This is what `/plan-creator` § Step 4d reads when creating sub-plan issues to d
 
 ### Failure handling
 
-Same pattern as plan-creator: surface the error and manual command, do not block the master plan file from existing.
+Same pattern as plan-creator: surface the error and manual command, do not block the master plan file from existing. When issue creation fails, or the multiple-masters skip path is taken, leave `github_issue: none` in place with a `TODO: create umbrella issue` note in the Summary, so the key is never absent; a `none` master carries no `github_issue_url` or `github_issue_node_id` keys.
 
 ## Step 8: Cleanup & Summary
 

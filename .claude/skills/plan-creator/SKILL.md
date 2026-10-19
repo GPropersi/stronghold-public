@@ -147,6 +147,7 @@ After all subagents return their one-line confirmations:
 ```markdown
 ---
 repo: <repo>
+type: plan
 branch: <plan-branch>
 worktree: <repo>/.claude/worktrees/<slug>
 ---
@@ -181,6 +182,8 @@ finished: false
 - Think like a staff engineer: anticipate edge cases, dependencies, and ordering constraints.
 - Each phase must have at least one actionable to-do checkbox.
 - **Contracts exact, mechanics to the executor (trial since 2026-10-17).** Spell out exactly what is expensive to get wrong late: endpoints, methods and status codes; request/response and data shapes; DB schema and migrations; signatures that cross module boundaries and their callers in other files; authorization/security rules; UX states (empty, error, mobile); step ordering. Leave out what the executor discovers and its tests or lint catch at once: imports, internal helper names, exact edit locations, which existing test files need key updates, standard verify commands. *Why:* plan reviews kept finding majors in pass 3, mostly mechanical (a missing import, exact-equality tests, a misdescribed helper API), each of which fails on the executor's first test run. Contract bugs (a 404, a universal 400) are the ones that cost a late redesign. Re-measure after 2-3 plans (findings by class per pass, executor fix loops, push-review finds); if push review starts catching contract bugs, move the line.
+- **Checkbox marker grammar.** Boxes are `- [ ]`, `- [x]` or `- [~]` (deferred). Write `- [ ] (post-merge) text` only for an item that completes by itself when its PR merges and needs nothing else done. Anything needing an action after merge (deploy, restart, verify in production) is `- [ ] (manual, post-merge) text`, which reconcile never ticks. Do not add a `## Progress Tracking` section; the body boxes are the progress record.
+- **Issue ownership.** A sub-plan of a master gets its own distinct issue, never the master's number (the master's number is the umbrella).
 - **Every step gets a `Must be true:` list.** It names the behaviors the step's tests must prove, failure modes and edge cases included. It is the safety net for detail the plan no longer spells out: the executor must satisfy every item, and the step review panel checks each one is proven by a test.
 - The to-do list carries the contract detail; phase descriptions should be brief overviews.
 - **Size each step to one executor's context.** Each step is executed by a fresh subagent whose cost grows with every turn (4 weeks of run-plan transcripts: executors with 41+ turns exceeded 150k tokens of context 66–93% of the time, those under 20 turns never did). Aim for roughly 8 files or 20 edits per step and split a larger phase into consecutive steps along natural seams (backend vs frontend, module vs its tests, markup vs behaviour), each leaving the tree green. Do not split just to shrink: steps that depend on each other's in-flight state should stay together, and the final full-verification step stays separate.
@@ -199,7 +202,7 @@ finished: false
    **Sub-plan:** [<sub-plan-name>](../<topic>/<sub-plan-name>.md)
    ```
 
-   This makes the master → sub-plan relationship navigable from the master file.
+   If the step already has a `**Sub-plan:** none` line, replace it with the link instead of adding a second line. Also set that step's `**Status:**` line to `in-progress` (when it currently starts with `todo`). This makes the master → sub-plan relationship navigable from the master file.
 
 2. **Sub-plan → master backref:** Insert a `**Master plan:**` field into the sub-plan file, immediately after the `## Summary` heading (before the summary text). Derive `<master-parent-topic>` from the master file's parent directory (the directory the master lives in). Format:
 
@@ -489,11 +492,11 @@ Then run the `addProjectV2ItemById` mutation and the bot-assignee mutation using
 
 ### 4d. Detect master parent, attach as native sub-issue, and back-link
 
-First, resolve which umbrella issue (if any) this sub-plan belongs to:
+First, resolve which umbrella issue (if any) this sub-plan belongs to. Only a numeric `github_issue:` counts as an umbrella: `github_issue: none` (the explicit waiver) or any invalid/empty/non-numeric value means no umbrella, so **skip this entire step** (no `gh issue view`, no sub-issue attach, no `Part of #` backref).
 
-**Sub-plan mode** (Step 0 set `<sub-plan-mode>=true`): read `<master-path>` frontmatter for `github_issue:` (the umbrella number `<umbrella>`) and `github_issue_node_id:` (the umbrella's GraphQL node ID `<umbrella-node-id>`).
+**Sub-plan mode** (Step 0 set `<sub-plan-mode>=true`): read `<master-path>` frontmatter for `github_issue:` (the umbrella number `<umbrella>`, numeric only) and `github_issue_node_id:` (the umbrella's GraphQL node ID `<umbrella-node-id>`).
 
-**Default mode:** glob `~/code/plans/<repo>/open/<topic>/*-master.md`. If exactly one file exists and its frontmatter has `github_issue:`, use it. If multiple master files exist or none have a linked issue, **skip this entire step**.
+**Default mode:** glob `~/code/plans/<repo>/open/<topic>/*-master.md`. If exactly one file exists and its frontmatter has a numeric `github_issue:`, use it. If multiple master files exist or none have a numeric linked issue, **skip this entire step**.
 
 When an umbrella is found, do BOTH of the following:
 
@@ -539,7 +542,7 @@ Insert the `github_issue*` keys preserving existing ones (`repo:`, `branch:`, `w
 
 ### Failure handling
 
-If `gh issue create` fails (rate limit, transient API error), DO NOT block the plan creation. Surface the error and the manual `gh issue create` command to the user, then exit Step 4. The plan file still exists; the issue can be created later and frontmatter added manually.
+If `gh issue create` fails (rate limit, transient API error), DO NOT block the plan creation. Surface the error and the manual `gh issue create` command to the user, then exit Step 4. The plan file still exists: write `github_issue: none` into its frontmatter (with a `TODO: create issue and replace none` note in the plan's Summary) so the key is never absent; replace `none` with the real number once the issue is created.
 
 ## Handoff Message
 

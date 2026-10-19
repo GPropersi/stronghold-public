@@ -101,25 +101,15 @@ Run with `run-suite.sh`:
 ### Step 4: Update the Plan Document
 **CRITICAL: Always update progress tracking.**
 
-#### If Progress Tracking Section Exists:
-- Change `- [ ] **Phase X: Name**` to `- [x] **Phase X: Name** - COMPLETE (YYYY-MM-DD)`
-- Add checkmarks for completed sub-items: `- ✅ Item description`
-- Example:
-```markdown
-- [x] **Phase 4: Navigation Button Migration** - COMPLETE (2026-02-14)
-  - ✅ Updated back_home_btn.html - added data-route attribute
-  - ✅ Updated logout_btn.html - added data-route attribute
-  - ✅ Updated navbar module - added handlers
-  - ✅ Build verified - clean build
-```
-
-#### If No Progress Tracking Section Exists:
-- Create a new "## Progress Tracking" section at the end of the document
-- Add checkboxes for each phase/step mentioned in the plan
-- Mark completed items with `[x]` and date
+#### Tick the Step's Body Boxes:
+- Tick every `- [ ]` under the completed step's `### N.` heading to `- [x]` (the body boxes are the only progress record; do not create or update a `## Progress Tracking` section).
+- Leave boxes marked `(post-merge)` / `(manual, post-merge)` or `[~]` as they are; they are completed by reconcile, a human, or deferral.
 
 #### Update the Finished Flag:
-- If all phases are complete, change `**finished**: false` to `**finished**: true`
+- If all steps are complete, first run `~/code/.claude/scripts/plan-status.sh <repo>/<plan-name> --verify`; on exit 5 STOP and report the unticked boxes it prints. Otherwise set `finished: true` under the plan's `## Status` heading (never in frontmatter).
+
+#### Reconcile the Master Plan:
+- After a sub-plan finishes, run `~/code/.claude/scripts/plan-lifecycle.sh reconcile <repo-dir> <topic>` (its edits are covered by the end-of-step stronghold sync). Exit 1 (no master step in the topic) and exit 4 are non-fatal: note them in the report and continue.
 
 #### Move the Finished Topic (lifecycle — topic-as-unit):
 **CRITICAL: This skill owns the open → completed lifecycle move.** When the whole topic becomes fully done — the master plan AND all its sub-plans have `finished: true` — after flipping the frontmatter, run the script (never a hand-typed `git mv`):

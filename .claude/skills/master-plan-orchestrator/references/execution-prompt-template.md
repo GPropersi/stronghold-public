@@ -33,6 +33,10 @@ here. If a run is ever launched directly via the Messages API instead of the `Ag
 ## Template
 
 ```markdown
+---
+repo: <repo>
+type: prompt
+---
 # Fable 5 Execution Prompt — <Title>
 
 Reference material for running <initiative one-liner> as one unattended Fable 5 effort, with
@@ -221,7 +225,8 @@ place, as you reach it.>
 
 ### Definition of done
 
-- All <N> phases' to-do items complete and verified.
+- All <N> phases' to-do items complete and verified: tick every master to-do, and
+  `~/code/.claude/scripts/plan-status.sh <repo>/<master-name> --verify` passes (exit 0).
 - <Final full-suite verification command(s) from the repo's **Commands** table, matching its
   "Final Verification" convention — e.g. the full UI + integration suite green with the legacy
   system fully removed.>
