@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plans</title>
+<script>
+(function(){try{var t=localStorage.getItem('plans.theme');if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme',t)}}catch(e){}})();
+</script>
+<style>
+:root{--bg:#f4f6f6;--panel:#fff;--rule:#d5dbdb;--ink:#1f2424;--muted:#566668;--ok:#17702f;--ok-bg:rgba(36,167,69,.12);--open:#a8480a;--hold:#0b6279;--hold-bg:rgba(34,211,238,.14);--defer:#7a5900;--defer-bg:rgba(240,193,90,.14);--danger:#a8222f;--danger-bg:#fdf0f1;--track:#e3e8e8;--radius:8px}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#1a1a1a;--panel:#262626;--rule:#3a3a3a;--ink:#e8e8e8;--muted:#a3a3a3;--ok:#4ade80;--ok-bg:rgba(74,222,128,.12);--open:#fb923c;--hold:#22d3ee;--hold-bg:rgba(34,211,238,.12);--defer:#f0c15a;--defer-bg:rgba(240,193,90,.12);--danger:#f87171;--danger-bg:rgba(248,113,113,.12);--track:#3a3a3a}}
+:root[data-theme=dark]{--bg:#1a1a1a;--panel:#262626;--rule:#3a3a3a;--ink:#e8e8e8;--muted:#a3a3a3;--ok:#4ade80;--ok-bg:rgba(74,222,128,.12);--open:#fb923c;--hold:#22d3ee;--hold-bg:rgba(34,211,238,.12);--defer:#f0c15a;--defer-bg:rgba(240,193,90,.12);--danger:#f87171;--danger-bg:rgba(248,113,113,.12);--track:#3a3a3a}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;overflow-wrap:anywhere}
+a{color:var(--hold)}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.8125rem}
+.muted{color:var(--muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+header{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:space-between;padding:1rem;border-bottom:1px solid var(--rule);background:var(--panel)}
+h1{font-size:1.15rem;margin:0}
+.ctl{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+button,label.tog{min-height:2.75rem;padding:0 .9rem;border:1px solid var(--rule);border-radius:var(--radius);background:var(--panel);color:var(--ink);font:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:.5rem}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--open);outline-offset:2px}
+label.tog:focus-within{outline:2px solid var(--open);outline-offset:2px}
+label.tog input{width:1.1rem;height:1.1rem;margin:0}
+main{max-width:60rem;margin:0 auto;padding:1rem}
+#live{margin-bottom:.5rem;min-height:1.5rem}
+.banner{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;padding:.5rem .75rem;margin-top:.25rem;border:1px solid var(--danger);border-radius:var(--radius);background:var(--danger-bg);color:var(--danger)}
+h2{font-size:1rem;margin:1.5rem 0 .5rem;display:flex;flex-wrap:wrap;gap:.25rem 1rem;justify-content:space-between;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+h3.grp{font-size:.875rem;margin:1rem 0 .5rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:var(--radius);margin-bottom:.5rem;padding:.25rem 1rem .75rem}
+.row1{display:flex;flex-wrap:wrap;gap:.25rem .5rem;align-items:center}
+.cardbtn{border:0;background:transparent;padding:0;min-width:2.75rem;max-width:100%;text-align:left;overflow-wrap:anywhere;font-weight:600;gap:.5rem}
+.cardbtn .nm{min-width:0;overflow-wrap:anywhere}
+.chev{flex:none;width:.6rem;height:.6rem;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s}
+.cardbtn[aria-expanded="true"] .chev{transform:rotate(45deg)}
+.pill{border:1px solid;border-radius:25px;padding:0 .5rem;font-size:.75rem;line-height:1.5}
+.p-master{color:var(--hold);background:var(--hold-bg);border-color:var(--hold)}
+.p-open{color:var(--open);border-color:var(--open)}
+.p-done{color:var(--ok);background:var(--ok-bg);border-color:var(--ok)}
+.p-drift{color:var(--danger);background:var(--danger-bg);border-color:var(--danger)}
+.meta{color:var(--muted);font-size:.8125rem;margin-top:.25rem;display:flex;flex-wrap:wrap;gap:.25rem 1rem}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem .75rem;margin-top:.5rem}
+.track{flex:1;min-width:6rem;height:8px;border-radius:4px;background:var(--track);overflow:hidden}
+.fill{height:100%;background:var(--ok)}
+.count{font-variant-numeric:tabular-nums;text-align:right}
+.held{font-size:.75rem;padding:0 .4rem;border-radius:4px}
+.h-pm{background:var(--hold-bg);color:var(--hold)}
+.h-df{background:var(--defer-bg);color:var(--defer);border:1px dashed var(--defer)}
+.steps{border-top:1px solid var(--rule);margin-top:.5rem;padding:.5rem 0 0}
+.steps.stale{opacity:.5}
+.step{padding:.5rem 0}
+.step h4{font-size:.9rem;margin:0;display:flex;flex-wrap:wrap;justify-content:space-between;gap:.25rem 1rem}
+.step ul{list-style:none;margin:.25rem 0 0;padding:0}
+.step li{font-size:.875rem;padding:.125rem 0 .125rem 1.5rem;position:relative}
+.step li::before{content:"\2610";position:absolute;left:0}
+.step li.done{color:var(--muted)}.step li.done::before{content:"\2611";color:var(--ok)}
+.step li.pm::before{content:"\25F7";color:var(--hold)}
+.step li.df{border-left:2px dashed var(--defer);color:var(--defer)}.step li.df::before{content:"~";left:.25rem}
+.child{font-size:.8125rem;color:var(--muted);margin-top:.25rem}
+.derr{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;color:var(--danger)}
+.empty{color:var(--muted);padding:1rem;border:1px dashed var(--rule);border-radius:var(--radius)}
+@media (max-width:640px){header{padding:.75rem}main{padding:.75rem}.card{padding:.25rem .75rem .75rem}}
+@media (prefers-reduced-motion:reduce){.chev{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Plans</h1>
+  <div class="ctl">
+    <label class="tog"><input type="checkbox" id="sc"> Show completed</label>
+    <button id="refresh" type="button">Refresh</button>
+    <span id="updated" class="muted mono"></span>
+    <button id="th" type="button"></button>
+  </div>
+</header>
+<main>
+  <div id="live" aria-live="polite">
+    <span id="counts"></span>
+    <div id="banner" class="banner" hidden><span id="bmsg"></span><button id="retry" type="button">Retry</button></div>
+  </div>
+  <div id="list"></div>
+</main>
+<script>
+(function(){
+'use strict';
+var SC_KEY='plans.showCompleted',TH_KEY='plans.theme';
+var HELD_LABEL={'done':'Done','open':'Open','post-merge':'Post-merge','manual-post-merge':'Manual post-merge','deferred':'Deferred'};
+var BOX_CLASS={'done':'done','open':'','post-merge':'pm','manual-post-merge':'pm','deferred':'df'};
+
+function store(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function save(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+function $(id){return document.getElementById(id)}
+function el(tag,cls,text){var n=document.createElement(tag);if(cls){n.className=cls}if(text!=null){n.textContent=String(text)}return n}
+function syncChildren(parent,nodes){
+  Array.prototype.slice.call(parent.children).forEach(function(c){if(nodes.indexOf(c)<0){parent.removeChild(c)}});
+  for(var i=0;i<nodes.length;i++){
+    if(parent.children[i]!==nodes[i]){parent.insertBefore(nodes[i],parent.children[i]||null)}
+  }
+  while(parent.children.length>nodes.length){parent.removeChild(parent.lastElementChild)}
+}
+function pct(done,total){
+  if(!(total>0)){return 0}
+  return Math.max(0,Math.min(100,Math.round(done/total*100)));
+}
+
+var listEl=$('list'),scEl=$('sc'),refreshBtn=$('refresh'),thBtn=$('th'),updatedEl=$('updated');
+var countsEl=$('counts'),bannerEl=$('banner'),bmsgEl=$('bmsg'),retryBtn=$('retry');
+
+/* ---------- theme ---------- */
+var darkQuery=window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)'):null;
+function effectiveTheme(){
+  var t=document.documentElement.getAttribute('data-theme');
+  if(t==='dark'||t==='light'){return t}
+  return darkQuery&&darkQuery.matches?'dark':'light';
+}
+function paintTheme(){thBtn.textContent='Theme: '+effectiveTheme()}
+thBtn.addEventListener('click',function(){
+  var next=effectiveTheme()==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',next);
+  save(TH_KEY,next);
+  paintTheme();
+});
+if(darkQuery&&darkQuery.addEventListener){darkQuery.addEventListener('change',paintTheme)}
+paintTheme();
+
+/* ---------- state ---------- */
+var showCompleted=store(SC_KEY)==='1';
+scEl.checked=showCompleted;
+var firstLoadDone=false;
+var listSeq=0,listCtl=null;
+var gen=0;
+var detailCache=new Map();
+var expanded=new Set();
+var cards=new Map();      /* key -> card record */
+var sections=new Map();   /* repo -> section record */
+var idCounter=0;
+var loadingEl=el('p','empty','Loading plans…');
+var emptyAllEl=el('div','empty','No plans found.');
+
+/* ---------- fetching ---------- */
+function ApiError(message,status){this.message=message;this.status=status||0}
+async function fetchJson(url,signal){
+  var res;
+  try{
+    res=await fetch(url,{signal:signal,cache:'no-store',headers:{'Accept':'application/json'}});
+  }catch(e){
+    if(signal.aborted){throw e}
+    throw new ApiError('Network or session error. Check your connection or sign in again.');
+  }
+  if(!res.ok){throw new ApiError('The server answered HTTP '+res.status+'.',res.status)}
+  try{
+    return await res.json();
+  }catch(e){
+    if(signal.aborted){throw e}
+    throw new ApiError('The response was not JSON. Your session may have expired.');
+  }
+}
+function errText(e){return e instanceof ApiError?e.message:'Unexpected error.'}
+
+/* ---------- banner / status ---------- */
+function showBanner(msg){bmsgEl.textContent='Could not load plans. '+msg;bannerEl.hidden=false}
+function hideBanner(){bannerEl.hidden=true}
+function two(n){return (n<10?'0':'')+n}
+function stampUpdated(){var d=new Date();updatedEl.textContent='Last updated '+two(d.getHours())+':'+two(d.getMinutes())}
+
+/* ---------- cards ---------- */
+function issueNode(p){
+  if(p.issue==null){return el('span','muted mono','no issue')}
+  if(p.issue==='none'){return el('span','muted mono','waived')}
+  var label='issue #'+p.issue;
+  if(typeof p.issue_url==='string'&&p.issue_url.startsWith('https://')){
+    var a=el('a','mono',label);a.href=p.issue_url;a.rel='noopener noreferrer';return a;
+  }
+  return el('span','muted mono',label);
+}
+function buildInfo(rec,p){
+  var frag=document.createDocumentFragment();
+  var row=rec.row;
+  while(row.children.length>1){row.removeChild(row.lastElementChild)}
+  if(p.kind==='master'||p.kind==='orchestrator'){row.appendChild(el('span','pill p-master',p.kind))}
+  row.appendChild(el('span','pill '+(p.state==='completed'?'p-done':'p-open'),p.state));
+  row.appendChild(issueNode(p));
+  var meta=el('div','meta');
+  if(p.branch){meta.appendChild(el('span','mono','branch: '+p.branch))}
+  meta.appendChild(el('span',null,p.step_count+(p.step_count===1?' step':' steps')));
+  var bar=el('div','bar');
+  var track=el('div','track');
+  var steps=p.basis==='steps';
+  track.setAttribute('role','progressbar');
+  track.setAttribute('aria-label',p.name+' '+p.done+' of '+p.total+(steps?' steps':''));
+  track.setAttribute('aria-valuemin','0');
+  track.setAttribute('aria-valuemax',String(Math.max(p.total,1)));
+  track.setAttribute('aria-valuenow',String(p.done));
+  var fill=el('div','fill');fill.style.width=pct(p.done,p.total)+'%';
+  track.appendChild(fill);
+  bar.appendChild(track);
+  bar.appendChild(el('span','count mono',p.done+'/'+p.total+(steps?' steps':'')));
+  var held=p.held||{};
+  var pm=(held.post_merge||0)+(held.manual_post_merge||0);
+  if(pm>0){
+    var t=pm+' post-merge';
+    if(held.manual_post_merge>0){t+=' ('+held.manual_post_merge+' manual)'}
+    bar.appendChild(el('span','held h-pm',t));
+  }
+  if(held.deferred>0){bar.appendChild(el('span','held h-df',held.deferred+' deferred'))}
+  (p.drift||[]).forEach(function(d){bar.appendChild(el('span','pill p-drift',d))});
+  frag.appendChild(meta);frag.appendChild(bar);
+  rec.info.replaceChildren(frag);
+}
+function makeCard(key,p){
+  var rec={key:key,id:'panel-'+(++idCounter),sig:null,open:expanded.has(key),reqId:0,ctl:null,rendered:false,errShown:false,loadedGen:-1};
+  rec.el=el('div','card');
+  rec.row=el('div','row1');
+  rec.btn=el('button','cardbtn');
+  rec.btn.type='button';
+  rec.btn.setAttribute('aria-controls',rec.id);
+  rec.nameEl=el('span','nm');
+  rec.btn.appendChild(rec.nameEl);
+  rec.btn.appendChild(el('span','chev'));
+  rec.btn.querySelector('.chev').setAttribute('aria-hidden','true');
+  rec.row.appendChild(rec.btn);
+  rec.info=el('div');
+  rec.panel=el('div','steps');
+  rec.panel.id=rec.id;
+  rec.errRow=el('div','derr');
+  rec.errRow.setAttribute('role','alert');
+  rec.errMsg=el('span');
+  rec.errRetry=el('button',null,'Retry');
+  rec.errRetry.type='button';
+  rec.errRow.appendChild(rec.errMsg);
+  rec.errRow.appendChild(rec.errRetry);
+  rec.el.appendChild(rec.row);
+  rec.el.appendChild(rec.info);
+  rec.el.appendChild(rec.panel);
+  rec.btn.addEventListener('click',function(){setOpen(rec,!rec.open)});
+  rec.errRetry.addEventListener('click',function(){loadDetail(rec,'retry')});
+  paintOpen(rec);
+  return rec;
+}
+function paintOpen(rec){
+  rec.btn.setAttribute('aria-expanded',rec.open?'true':'false');
+  rec.panel.hidden=!rec.open;
+}
+function updateCard(rec,p){
+  var sig=JSON.stringify(p);
+  rec.nameEl.textContent=p.name;
+  if(sig===rec.sig){return}
+  rec.sig=sig;
+  buildInfo(rec,p);
+}
+function setOpen(rec,open){
+  rec.open=open;
+  if(open){expanded.add(rec.key)}else{expanded.delete(rec.key)}
+  paintOpen(rec);
+  if(open){
+    var cached=detailCache.get(rec.key);
+    if(cached){renderSteps(rec,cached)}else{loadDetail(rec,'open')}
+  }
+}
+
+/* ---------- detail ---------- */
+function stepRow(s){
+  var wrap=el('div','step');
+  var h=el('h4');
+  h.appendChild(el('span',null,s.n+'. '+s.title));
+  var right=s.status_word?s.status_word:(s.done+'/'+s.total);
+  h.appendChild(el('span','mono',right));
+  wrap.appendChild(h);
+  var c=s.child;
+  if(c){
+    var line;
+    if(c.kind==='dangling'){line='sub-plan missing'}
+    else{
+      line='sub-plan '+c.repo+'/'+c.topic+' · '+c.done+'/'+c.total;
+      if(c.state==='completed'){line+=' (completed)'}
+      if(c.kind==='moved'){line+=' (moved)'}
+    }
+    wrap.appendChild(el('div','child',line));
+  }
+  if(s.boxes&&s.boxes.length){
+    var ul=el('ul');
+    s.boxes.forEach(function(b){
+      var known=Object.prototype.hasOwnProperty.call(BOX_CLASS,b.state);
+      var li=el('li',known?BOX_CLASS[b.state]:'');
+      li.appendChild(el('span','sr',(known?HELD_LABEL[b.state]:b.state)+': '));
+      li.appendChild(document.createTextNode(b.text));
+      ul.appendChild(li);
+    });
+    wrap.appendChild(ul);
+  }
+  return wrap;
+}
+function renderSteps(rec,d){
+  var frag=document.createDocumentFragment();
+  var steps=d.steps||[];
+  if(!steps.length){frag.appendChild(el('div','muted','No steps.'))}
+  steps.forEach(function(s){frag.appendChild(stepRow(s))});
+  rec.panel.replaceChildren(frag);
+  rec.panel.classList.remove('stale');
+  rec.panel.removeAttribute('aria-busy');
+  rec.rendered=true;rec.errShown=false;
+}
+function showDetailError(rec,msg){
+  rec.errMsg.textContent=msg;
+  if(!rec.errShown||rec.errRow.parentNode!==rec.panel){rec.panel.replaceChildren(rec.errRow)}
+  rec.panel.classList.remove('stale');
+  rec.panel.removeAttribute('aria-busy');
+  rec.rendered=false;rec.errShown=true;
+}
+async function loadDetail(rec,trigger){
+  if(rec.ctl){rec.ctl.abort()}
+  var ctl=new AbortController();rec.ctl=ctl;
+  var myReq=++rec.reqId,myGen=gen;
+  if(rec.rendered){
+    rec.panel.classList.add('stale');rec.panel.setAttribute('aria-busy','true');
+  }else if(!rec.errShown){
+    rec.panel.replaceChildren(el('div','muted','Loading…'));
+  }
+  var parts=rec.key.split('/').map(encodeURIComponent).join('/');
+  var data;
+  try{
+    data=await fetchJson('/api/plan/'+parts,ctl.signal);
+    if(!data||!Array.isArray(data.steps)){throw new ApiError('The response was not a plan.')}
+  }catch(e){
+    if(ctl.signal.aborted||myReq!==rec.reqId||myGen!==gen){return}
+    var msg=(e instanceof ApiError&&e.status===404)?'This plan moved or was removed. Refresh the list.':'Could not load plan details. '+errText(e);
+    showDetailError(rec,msg);
+    return;
+  }
+  if(myReq!==rec.reqId||myGen!==gen){return}
+  var active=document.activeElement;
+  var moveFocus=trigger==='retry'&&(active===rec.errRetry||active===document.body||!active);
+  try{
+    renderSteps(rec,data);
+  }catch(e){
+    showDetailError(rec,'Could not show plan details.');
+    return;
+  }
+  detailCache.set(rec.key,data);
+  if(moveFocus){rec.btn.focus()}
+}
+
+/* ---------- list rendering ---------- */
+function makeSection(repo){
+  var s={repo:repo};
+  s.el=el('section');
+  s.h2=el('h2');
+  s.nameEl=el('span',null,repo);
+  s.countEl=el('span','mono');
+  s.h2.appendChild(s.nameEl);s.h2.appendChild(s.countEl);
+  s.empty=el('div','empty');
+  s.open=el('div');
+  s.compHead=el('h3','grp',repo+' · completed');
+  s.done=el('div');
+  return s;
+}
+function cardsFor(plans,section,wantCompleted,seen){
+  var out=[];
+  plans.forEach(function(p){
+    var key=p.repo+'/'+p.state+'/'+p.topic+'/'+p.name;
+    var rec=cards.get(key);
+    if(!rec){rec=makeCard(key,p);cards.set(key,rec)}
+    seen.add(key);
+    updateCard(rec,p);
+    out.push(rec.el);
+  });
+  return out;
+}
+function render(data,wantCompleted){
+  var seen=new Set(),seenRepos=new Set();
+  var nodes=[];
+  var totalOpen=0,totalDone=0;
+  data.repos.forEach(function(r){
+    var sec=sections.get(r.repo);
+    if(!sec){sec=makeSection(r.repo);sections.set(r.repo,sec)}
+    seenRepos.add(r.repo);
+    var open=r.plans.filter(function(p){return p.state!=='completed'});
+    var done=r.plans.filter(function(p){return p.state==='completed'});
+    totalOpen+=open.length;totalDone+=done.length;
+    sec.countEl.textContent=open.length+' open'+(wantCompleted?' · '+done.length+' completed':'');
+    syncChildren(sec.open,cardsFor(open,sec,wantCompleted,seen));
+    syncChildren(sec.done,cardsFor(done,sec,wantCompleted,seen));
+    var kids=[sec.h2];
+    if(!r.plans.length){
+      sec.empty.textContent=wantCompleted?'No plans in this repo.':'No open plans. Turn on "Show completed" to see finished ones.';
+      kids.push(sec.empty);
+    }
+    kids.push(sec.open);
+    if(wantCompleted&&done.length){kids.push(sec.compHead);kids.push(sec.done)}
+    syncChildren(sec.el,kids);
+    nodes.push(sec.el);
+  });
+  cards.forEach(function(rec,key){if(!seen.has(key)){cards.delete(key)}});
+  sections.forEach(function(sec,repo){if(!seenRepos.has(repo)){sections.delete(repo)}});
+  if(!nodes.length){nodes.push(emptyAllEl)}
+  syncChildren(listEl,nodes);
+  countsEl.textContent=totalOpen+(totalOpen===1?' open plan':' open plans')+(wantCompleted?', '+totalDone+' completed':'');
+}
+
+async function loadList(trigger){
+  if(listCtl){listCtl.abort()}
+  var ctl=new AbortController();listCtl=ctl;
+  var id=++listSeq,want=showCompleted;
+  listEl.setAttribute('aria-busy','true');
+  if(!firstLoadDone){syncChildren(listEl,[loadingEl])}
+  var data;
+  try{
+    data=await fetchJson('/api/plans'+(want?'?completed=1':''),ctl.signal);
+    if(!data||!Array.isArray(data.repos)){throw new ApiError('The response was not a plan list.')}
+  }catch(e){
+    if(ctl.signal.aborted||id!==listSeq){return}
+    showBanner(errText(e));
+    if(!firstLoadDone){syncChildren(listEl,[])}
+    listEl.removeAttribute('aria-busy');
+    return;
+  }
+  if(id!==listSeq){return}
+  var active=document.activeElement;
+  var moveFocus=trigger==='retry'&&(active===retryBtn||active===document.body||!active);
+  try{
+    render(data,want);
+  }catch(e){
+    showBanner('The plan list could not be displayed.');
+    if(!firstLoadDone){syncChildren(listEl,[])}
+    listEl.removeAttribute('aria-busy');
+    return;
+  }
+  hideBanner();
+  firstLoadDone=true;
+  stampUpdated();
+  gen++;
+  detailCache.clear();
+  cards.forEach(function(rec){if(rec.open){loadDetail(rec,'refresh')}});
+  listEl.removeAttribute('aria-busy');
+  if(moveFocus){refreshBtn.focus()}
+}
+
+/* ---------- wiring ---------- */
+scEl.addEventListener('change',function(){
+  showCompleted=scEl.checked;
+  save(SC_KEY,showCompleted?'1':'0');
+  loadList('toggle');
+});
+refreshBtn.addEventListener('click',function(){loadList('refresh')});
+retryBtn.addEventListener('click',function(){loadList('retry')});
+loadList('first');
+})();
+</script>
+</body>
+</html>
