@@ -142,12 +142,14 @@ After all subagents return their one-line confirmations:
 1. Create `~/code/plans/<repo>/open/<topic>/<feature-name>.md` (create `~/code/plans/<repo>/open/<topic>/` if missing).
 2. Name the file after the feature/task (kebab-case).
 3. If research is written as a separate document, it goes to `~/code/plans/<repo>/open/<topic>/research/<doc-name>.md`.
-3. Structure the plan as follows (every new plan starts with `repo: <repo>` YAML frontmatter — the authoritative association that survives moves; add `branch: <plan-branch>` when the Branch Guard resolved one (omit it when `<plan-branch>` is unset — i.e. the plan stayed on the Default branch); add `worktree: <worktree>` when the Branch Guard recorded one (omit it when `<worktree>` is unset, exactly like `branch:`); Step 4e adds the `github_issue*` keys alongside these):
+3. Structure the plan as follows (every new plan starts with `repo: <repo>` YAML frontmatter — the authoritative association that survives moves; add `short_title:` (2-5 word plain-English name, max 40 chars, no code or file names; it is the plans dashboard card title); add `short_summary:` (1-2 plain sentences, max 220 chars, quoted, no code: what the plan is trying to do and why; the dashboard shows it when a card opens); add `branch: <plan-branch>` when the Branch Guard resolved one (omit it when `<plan-branch>` is unset — i.e. the plan stayed on the Default branch); add `worktree: <worktree>` when the Branch Guard recorded one (omit it when `<worktree>` is unset, exactly like `branch:`); Step 4e adds the `github_issue*` keys alongside these):
 
 ```markdown
 ---
 repo: <repo>
 type: plan
+short_title: <plain-English name, 2-5 words, max 40 chars, no code or file names; shown on the plans dashboard card>
+short_summary: "<1-2 plain-English sentences, max 220 chars, no code, paths or identifiers: what this plan is trying to do and why; shown when the dashboard card opens>"
 branch: <plan-branch>
 worktree: <repo>/.claude/worktrees/<slug>
 ---
@@ -163,6 +165,9 @@ worktree: <repo>/.claude/worktrees/<slug>
 
 ### 1. <Phase Title>
 <One sentence describing what this phase accomplishes.>
+
+**Summary:**
+- <2-4 plain-English bullets for a human skimming the plans dashboard>
 
 **To-do:**
 - [ ] <Specific, actionable sub-task>
@@ -184,6 +189,7 @@ finished: false
 - **Contracts exact, mechanics to the executor (trial since 2026-10-17).** Spell out exactly what is expensive to get wrong late: endpoints, methods and status codes; request/response and data shapes; DB schema and migrations; signatures that cross module boundaries and their callers in other files; authorization/security rules; UX states (empty, error, mobile); step ordering. Leave out what the executor discovers and its tests or lint catch at once: imports, internal helper names, exact edit locations, which existing test files need key updates, standard verify commands. *Why:* plan reviews kept finding majors in pass 3, mostly mechanical (a missing import, exact-equality tests, a misdescribed helper API), each of which fails on the executor's first test run. Contract bugs (a 404, a universal 400) are the ones that cost a late redesign. Re-measure after 2-3 plans (findings by class per pass, executor fix loops, push-review finds); if push review starts catching contract bugs, move the line.
 - **Checkbox marker grammar.** Boxes are `- [ ]`, `- [x]` or `- [~]` (deferred). Write `- [ ] (post-merge) text` only for an item that completes by itself when its PR merges and needs nothing else done. Anything needing an action after merge (deploy, restart, verify in production) is `- [ ] (manual, post-merge) text`, which reconcile never ticks. Do not add a `## Progress Tracking` section; the body boxes are the progress record.
 - **Issue ownership.** A sub-plan of a master gets its own distinct issue, never the master's number (the master's number is the umbrella).
+- **Every step gets a `**Summary:**` list (the plans dashboard shows it).** 2-4 bullets in plain English: what the step does and why, one short line each, no code, file paths, identifiers or SQL. A reader with no repo context should follow it. Bullets are plain `- ` lines, never checkboxes, and sit before `**To-do:**`.
 - **Every step gets a `Must be true:` list.** It names the behaviors the step's tests must prove, failure modes and edge cases included. It is the safety net for detail the plan no longer spells out: the executor must satisfy every item, and the step review panel checks each one is proven by a test.
 - The to-do list carries the contract detail; phase descriptions should be brief overviews.
 - **Size each step to one executor's context.** Each step is executed by a fresh subagent whose cost grows with every turn (4 weeks of run-plan transcripts: executors with 41+ turns exceeded 150k tokens of context 66–93% of the time, those under 20 turns never did). Aim for roughly 8 files or 20 edits per step and split a larger phase into consecutive steps along natural seams (backend vs frontend, module vs its tests, markup vs behaviour), each leaving the tree green. Do not split just to shrink: steps that depend on each other's in-flight state should stay together, and the final full-verification step stays separate.

@@ -39,6 +39,7 @@ DEFAULT_CONFIG: dict = {
     "both_forms": [],
     "python_invoked": [],
     "excluded_exempt": [],
+    "access_gate_copies": [],
     "fixed_buckets": {"stronghold": "stronghold"},
     "allowlist_exempt": [],
     "template": "",

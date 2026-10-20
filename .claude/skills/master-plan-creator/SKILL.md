@@ -82,6 +82,8 @@ Use exactly this structure:
 ---
 repo: <repo>
 type: master
+short_title: <plain-English name, 2-5 words, max 40 chars, no code or file names; shown on the plans dashboard card>
+short_summary: "<1-2 plain-English sentences, max 220 chars, no code, paths or identifiers: what this initiative is trying to do and why; shown when the dashboard card opens>"
 github_issue: none
 ---
 

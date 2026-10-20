@@ -240,8 +240,58 @@ def _import_checks(ctx: base.Context) -> list[base.Finding]:
     return out
 
 
+GATE_CANONICAL = ".claude/scripts/lib/access-gate.sh"
+GATE_BEGIN = re.compile(r"^# >>> access-gate\b.*>>>[ \t\r]*$")
+GATE_END = re.compile(r"^# <<< access-gate <<<[ \t\r]*$")
+
+
+def _gate_block(text: str) -> tuple[str | None, str]:
+    """Return (block, reason): the marker-delimited lines (markers included) or an error reason."""
+    lines = text.split("\n")
+    begins = [i for i, line in enumerate(lines) if GATE_BEGIN.match(line)]
+    ends = [i for i, line in enumerate(lines) if GATE_END.match(line)]
+    if len(begins) != 1 or len(ends) != 1:
+        return None, f"expected exactly one begin and one end marker, found {len(begins)} and {len(ends)}"
+    if begins[0] > ends[0]:
+        return None, "begin marker comes after the end marker"
+    return "\n".join(lines[begins[0]:ends[0] + 1]), ""
+
+
+def _access_gate_copies(ctx: base.Context) -> list[base.Finding]:
+    rule = "scripts.access-gate-copies"
+    copies = ctx.cfg.get("access_gate_copies") or []
+    if not copies:
+        return []
+    try:
+        canonical_text = (ctx.root / GATE_CANONICAL).read_text()
+    except (OSError, UnicodeDecodeError) as error:
+        return [base.Finding("error", rule, GATE_CANONICAL, f"cannot read canonical lib: {error}")]
+    canonical, reason = _gate_block(canonical_text)
+    if canonical is None:
+        return [base.Finding("error", rule, GATE_CANONICAL, f"canonical lib: {reason}")]
+    out: list[base.Finding] = []
+    for copy in copies:
+        repo = copy.split("/", 1)[0]
+        if repo not in ctx.repos:
+            out.append(base.Finding("info", rule, copy, f"repo {repo} is not cloned here; copy not checked"))
+            continue
+        try:
+            text = (ctx.root / copy).read_text()
+        except (OSError, UnicodeDecodeError) as error:
+            out.append(base.Finding("error", rule, copy, f"cannot read registered copy: {error}"))
+            continue
+        block, reason = _gate_block(text)
+        if block is None:
+            out.append(base.Finding("error", rule, copy, reason))
+        elif block != canonical:
+            out.append(base.Finding("error", rule, copy,
+                                    f"access-gate block differs from {GATE_CANONICAL}; re-copy it"))
+    return out
+
+
 def run(ctx: base.Context) -> list[base.Finding]:
     findings: list[base.Finding] = []
-    for check in (_png_checks, _secret_checks, _changelog_checks, _staging_scope, _import_checks):
+    for check in (_png_checks, _secret_checks, _changelog_checks, _staging_scope, _import_checks,
+                  _access_gate_copies):
         findings.extend(check(ctx))
     return findings

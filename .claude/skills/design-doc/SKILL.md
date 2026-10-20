@@ -5,14 +5,13 @@ description: Define WHAT a feature is and WHY before any implementation planning
 
 ## Role in the planning chain
 
-`/design-doc` answers **what and why**. `/plan-creator`, `/master-plan-creator`, and
-`/master-plan-orchestrator` answer **how** (implementation steps, phasing, branches). Run this
+`/design-doc` answers **what and why**. `/plan-creator` and `/master-plan-creator` answer
+**how** (implementation steps, phasing, branches). Run this
 skill first when a feature's *shape* is still open; skip it when the user already knows exactly
 what they want built and only needs it broken into steps.
 
-This skill's own execution **is** the orchestration — there is no separate hand-off agent (unlike
-`/master-plan-orchestrator`, which hands its output to a long-running Fable 5 run). You, running
-this skill right now, dispatch Sonnet 5 subagents for codebase research and ask the user directly
+This skill's own execution **is** the orchestration — there is no separate hand-off agent. You,
+running this skill right now, dispatch Sonnet 5 subagents for codebase research and ask the user directly
 for anything a subagent can't resolve.
 
 ## Repo-specific values come from the seam
@@ -164,14 +163,13 @@ this file to await. Always write `finished: true`, matching `/plan-creator`'s an
    `~/code/plans/<repo>/open/<topic>/mocks/` — mockups are permanent artifacts, same rule as
    `/plan-creator`.
 2. Do **not** create a GitHub issue here. `/plan-creator`, `/master-plan-creator`, and
-   `/master-plan-orchestrator` each create one already, and (per each skill's design-doc
-   detection step) read this file's Problem/Why/Outcome directly instead of re-deriving it —
-   currently wired into `/master-plan-orchestrator`.
+   each create one already. (The legacy `/master-plan-orchestrator` is the only skill whose
+   design-doc detection step reads this file's Problem/Why/Outcome today; point the others at
+   it by hand if the design doc should feed them.)
 3. Report: design doc path, number of decisions resolved, number deferred, mockup paths (if
    any — already sent via `SendUserFile` during Step 5).
-4. Suggest the next command based on what the user described: `/master-plan-orchestrator`
-   (multi-phase, single autonomous run), `/master-plan-creator` (multi-phase, per-phase human
-   review), or `/plan-creator` (single PR).
+4. Suggest the next command based on what the user described: `/master-plan-creator`
+   (multi-phase, per-phase human review) or `/plan-creator` (single PR).
 
 Append a changelog entry per user-level CLAUDE.md rules (`design-doc: Created
 ~/code/plans/<repo>/open/<topic>/<name>-design.md — N decisions resolved, M deferred`).

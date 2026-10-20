@@ -44,6 +44,8 @@ The review runs as a loop with up to `<pass-cap>` passes (Step 1e: 2 for `small`
 - **A pass produces 0 critical + 0 major findings** → plan is clean, stop reviewing
 - **Pass `<pass-cap>` completes** → hard cap reached; any remaining issues are tagged "resolve during implementation" in the review document
 
+**DD-rewrite churn guard**: When applying DD resolutions in pass N, record in the fix manifest each step whose text was rewritten wholesale or gained a new multi-contract block (more than ~30 changed lines or 3+ DDs touching one step). In pass N+1 the panel prompt must list those steps as 'first-review text' and each SA must run the cross-contract checks on them as a priority. If pass N is the second-to-last pass, tell the user in the Step 8a summary that the rewritten steps will get exactly one review; if pass N is the cap-1 pass, offer (AskUserQuestion) a scoped extra consistency pass over the rewritten steps only, or tag them 'highest risk, re-review at implementation' in the Verdict.
+
 After the final pass (whether early exit or hard cap), proceed to Step 9 (post-loop coherence check), then Steps 10-11 (root cause analysis and skill improvement) if prior reviews exist.
 
 ### Pass tracking
@@ -328,6 +330,7 @@ Present a concise summary using data from `coordinator-summary.md` and fix subag
 - **DD choices applied** (count)
 - **Self-corrections** (count of `self_corrected: true` across Step 4 + Step 6 results, if any) — a nonzero count means a fix or DD would have drifted into next pass's findings without this pass's self-check catching it; worth a glance if the number is consistently high across plans, as it signals the self-check itself may need sharpening
 - Path to the review file
+- Apply the DD-rewrite churn guard from the Review Loop section.
 
 #### 8b: Loop decision
 

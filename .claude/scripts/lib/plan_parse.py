@@ -22,6 +22,8 @@ STEP_RE = re.compile(r"^###[ \t]+(?:Step[ \t]+)?([0-9]+)[.:)][ \t]+(.*)$")
 STEP_PREFIX_RE = re.compile(r"^###[ \t]+(Step[ \t]+)?[0-9]+[.:)][ \t]")
 H2_RE = re.compile(r"^##[ \t]")
 BOX_RE = re.compile(r"^[ \t]*- \[([ xX~])\][ \t]*(.*)$")
+SUMMARY_RE = re.compile(r"^\*\*Summary:?\*\*:?[ \t]*(.*)$")
+SUMMARY_BULLET_RE = re.compile(r"^[ \t]*[-*][ \t]+(?!\[[ xX~]\])(.+)$")
 FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})")
 KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*):(.*)$")
 FINISHED_RE = re.compile(r"^finished:\s*(true|false)\s*$", re.IGNORECASE)
@@ -53,6 +55,7 @@ class Step:
     sub_plan_link: str | None = None  # link target, 'none', or None when no Sub-plan line
     branch: str | None = None
     status: str | None = None
+    summary: list[str] = field(default_factory=list)  # plain-English bullets under `**Summary:**`
 
 
 @dataclass
@@ -142,6 +145,7 @@ def parse_plan(path: str | Path) -> PlanDoc:
     finished: bool | None = None
     h1_count = 0
     fence: str | None = None
+    summarizing = False
 
     def close(end_line: int) -> None:
         nonlocal current
@@ -175,11 +179,27 @@ def parse_plan(path: str | Path) -> PlanDoc:
             if step_match:
                 close(number - 1)
                 current = Step(int(step_match.group(1)), step_match.group(2).strip(), number, number)
+                summarizing = False
                 continue
         if section == "status" and finished is None:
             found = FINISHED_RE.match(line.strip())
             if found:
                 finished = found.group(1).lower() == "true"
+        if current is not None and not in_progress:
+            summary_head = SUMMARY_RE.match(line.strip())
+            if summary_head:
+                summarizing = True
+                if summary_head.group(1).strip():
+                    current.summary.append(summary_head.group(1).strip())
+                continue
+            if summarizing:
+                bullet = SUMMARY_BULLET_RE.match(line)
+                if bullet:
+                    current.summary.append(bullet.group(1).strip())
+                    continue
+                if not line.strip():
+                    continue
+                summarizing = False
         box = BOX_RE.match(line)
         if box and not in_progress:
             marker, content = box.group(1), box.group(2)

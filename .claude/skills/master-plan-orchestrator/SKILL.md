@@ -1,7 +1,9 @@
 ---
 name: master-plan-orchestrator
-description: Create a master plan for a multi-phase initiative run end-to-end by ONE autonomous orchestrator agent on ONE branch with ONE PR, plus its execution prompt (per-phase Sonnet delegation, verification, CI-watch loop). Reads an existing /design-doc if present. Use for an "orchestrator plan" or "autonomous/unattended multi-phase plan". For human-gated phases use /master-plan-creator; if the feature shape is undecided run /design-doc first.
+description: LEGACY, no longer the recommended path; use /master-plan-creator for multi-phase work. Kept only for existing orchestrator plans. Originally: Create a master plan for a multi-phase initiative run end-to-end by ONE autonomous orchestrator agent on ONE branch with ONE PR, plus its execution prompt (per-phase Sonnet delegation, verification, CI-watch loop). Reads an existing /design-doc if present. Use for an "orchestrator plan" or "autonomous/unattended multi-phase plan". For human-gated phases use /master-plan-creator; if the feature shape is undecided run /design-doc first.
 ---
+
+> **LEGACY.** This skill is no longer the recommended way to plan multi-phase work: use `/master-plan-creator` (plus `/run-plan`). It stays only to support existing orchestrator plans. The plans dashboard no longer offers an orchestrator filter.
 
 ## Relationship to `/design-doc`, `/master-plan-creator`, and `/plan-creator`
 

@@ -103,6 +103,50 @@ def _title(lines: list[str], name: str) -> str:
     return name
 
 
+BLURB_MAX = 240
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
+
+
+def _blurb(lines: list[str]) -> str | None:
+    """Fallback one-to-two sentence blurb: the first prose paragraph under `## Summary`."""
+    fence: str | None = None
+    in_summary = False
+    para: list[str] = []
+    for line in lines[plan_parse._split_frontmatter(lines)[1] :]:
+        fenced = plan_parse.FENCE_RE.match(line)
+        if fence is not None:
+            if fenced and fenced.group(1)[0] == fence[0] and len(fenced.group(1)) >= len(fence):
+                fence = None
+            continue
+        if fenced:
+            fence = fenced.group(1)
+            continue
+        if line.startswith("## "):
+            if in_summary:
+                break
+            in_summary = line[3:].strip().lower() == "summary"
+            continue
+        if not in_summary:
+            continue
+        text = line.strip()
+        if para:
+            prose = bool(text) and text[0] not in "-*|>#"
+        else:
+            prose = bool(text) and text[0] not in "-*|>#`[" and not text.startswith(("Mockup", "**"))
+        if prose:
+            para.append(text)
+        elif para:
+            break
+    joined = re.sub(r"[`*]", "", " ".join(para))
+    if len(joined) < 40:
+        return None
+    out = " ".join(_SENTENCE_END.split(joined)[:2])
+    if len(out) > BLURB_MAX:
+        cut = out.rfind(" ", 0, BLURB_MAX - 1)
+        out = out[: cut if cut > 60 else BLURB_MAX - 1].rstrip(" ,;:") + "…"
+    return out
+
+
 def _kind(path: Path, doc: plan_parse.PlanDoc, lines: list[str]) -> str | None:
     """'plan' | 'master' | 'orchestrator', or None when the file is a filtered non-plan."""
     if doc.type in NON_PLAN_TYPES:
@@ -233,6 +277,7 @@ def _build(path: Path, root: Path, repo: str, state: str, topic: str, name: str)
                 "status_word": _status_word(step.status),
                 "branch": step.branch,
                 "child": child,
+                "summary": list(step.summary),
                 "boxes": [{"state": box.state, "text": box.text} for box in step.boxes],
             }
         )
@@ -243,6 +288,8 @@ def _build(path: Path, root: Path, repo: str, state: str, topic: str, name: str)
         "name": name,
         "kind": kind,
         "title": _title(lines, name),
+        "short_title": (doc.frontmatter.get("short_title") or "").strip().strip("\"'") or None,
+        "about": (doc.frontmatter.get("short_summary") or "").strip().strip("\"'") or _blurb(lines),
         "branch": doc.frontmatter.get("branch") or None,
         "issue": None if issue == "invalid" else issue,
         "issue_url": _safe_url(doc.github_issue_url),
@@ -257,8 +304,43 @@ def _build(path: Path, root: Path, repo: str, state: str, topic: str, name: str)
     }
 
 
+UPCOMING_MAX = 3
+
+
+def _upcoming(detail: dict) -> list[dict]:
+    """Not-yet-begun steps of an open plan that already has progress (its follow-ups)."""
+    if detail["state"] != "open" or not detail["done"] > 0:
+        return []
+    out: list[dict] = []
+    for step in detail["steps"]:
+        if step["status_word"] in DONE_WORDS:
+            continue
+        child = step["child"] if step["child"] and step["child"]["kind"] != "dangling" else None
+        child_done = child["done"] if child else 0
+        if step["done"] > 0 or child_done > 0:
+            continue
+        if step["total"] > 0 and step["done"] == step["total"]:
+            continue
+        out.append(
+            {
+                "n": step["n"],
+                "title": step["title"],
+                "status_word": step["status_word"],
+                "blurb": step["summary"][0] if step["summary"] else None,
+                "child": {"repo": child["repo"], "topic": child["topic"], "done": child["done"], "total": child["total"]}
+                if child
+                else None,
+            }
+        )
+        if len(out) == UPCOMING_MAX:
+            break
+    return out
+
+
 def _summary(detail: dict) -> dict:
-    return {key: value for key, value in detail.items() if key != "steps"}
+    out = {key: value for key, value in detail.items() if key not in ("steps", "about")}
+    out["upcoming"] = _upcoming(detail)
+    return out
 
 
 def list_plans(plans_dir: Path, include_completed: bool) -> dict:

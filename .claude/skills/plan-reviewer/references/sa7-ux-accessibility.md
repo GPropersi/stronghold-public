@@ -11,6 +11,7 @@
 - All JS/TS modules loaded on the same page — identify event listeners, keyboard bindings, show/hide logic
 - CSS files for the affected area — identify responsive breakpoints, hover/focus styles, touch target sizes
 - Existing accessibility attributes (`aria-*`, `role`, `tabindex`) in affected templates
+- Global document/window key and focus handlers on the affected page (grep for `addEventListener('keydown'`, `focus()` calls and modal/popover show events), not only files the plan names. For any programmatic focus restore (forced close, rollback, resync), check that no other handler can have moved focus in the same tick, and that any 'skip while focus is inside' guard cannot suppress a write the user must see (error rollback, resync after failure).
 
 **Review checklist:**
 

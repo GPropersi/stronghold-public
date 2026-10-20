@@ -29,6 +29,8 @@ When a plan instructs inserting code into an existing function, read the full fu
 
 **Grounding Rule — replacement code block (required):** When a plan gives a code block that *replaces* an existing function, read the source function and diff it: flag dropped outer guards (status checks, presence checks), removed else-branches (fallback banners, redirects), or omitted side-effects as **Critical** (a compiler/type-checker won't catch these). SA#2 owns the full line-by-line diff checklist.
 
+- **Contract interaction matrix** (required when the plan defines a queue, store, state machine or multi-trigger handler): list every contract/guard the plan introduces (keys and serialization, merge rules, outcome handling, focus/idle guards, close/reset triggers, gating) and check each pair for conflict. For outcome handling, enumerate outcome x scope/state (e.g. locked/forbidden/gone/stale/rate-limited x utub/user scope) and confirm each cell has a defined result, including clearing busy/saving state. For every Must-be-true invariant, find the contract that makes it true and confirm it holds when two sections/panels/triggers act concurrently. Flag any undefined cell or false invariant as Major.
+
 ## Part B — Codebase Integration & Conventions
 
 **Review checklist:**
