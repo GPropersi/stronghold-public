@@ -35,7 +35,7 @@ script or GitHub behavior was verified to refuse the alternative.
 | 2   | Cut `<part-branch>` from `origin/<default-branch>` (§2)          | `~/code` (`make wt-new`)   | `branch`                 |
 | 3   | Rebuild part *k*'s patch at the literal recorded `base-SHA` (§3) | `~/code/<repo-dir>`        | —                        |
 | 4   | Apply it, commit it with its provenance trailers (§3)            | `<part-wt>`                | —                        |
-| 5   | Delete `/tmp/claude/split/<part>.patch` (§3)                     | anywhere                   | —                        |
+| 5   | Delete `<scratch>/<part>.patch` (§3)                     | anywhere                   | —                        |
 | 6   | Run the push gate, then push via `<bot-push-script>` (§4)        | `<part-wt>`                | —                        |
 | 7   | Open the PR, then `pr-finish.sh` (§5)                            | `<part-wt>`                | `PR#`, `status: pushed`  |
 | 8   | Wait for CI; fetch failure logs if red (§7)                      | `<part-wt>` / `~/code`     | `CI-status`              |
@@ -99,7 +99,7 @@ why part *k+1* must never be chained off part *k*'s branch (§8).
 ## 3. Rebuilding the patch, applying it, committing it
 
 **This is a fresh rebuild, not a reuse.** Skill Step 4's cleanup already deleted every
-`/tmp/claude/split/<part>.patch` once the local gates passed; only the durable
+`<scratch>/<part>.patch` once the local gates passed; only the durable
 `<plan-dir>/split/<part>.paths` files survived. Rebuild from them:
 
 1. **Read part *k*'s `base-SHA` from `split-manifest.md`** — the literal 40-character SHA recorded
@@ -109,7 +109,7 @@ why part *k+1* must never be chained off part *k*'s branch (§8).
 2. **Build the patch** from `~/code/<repo-dir>` (one Bash call):
 
    ```
-   git diff --binary --full-index --no-renames <literal-base-SHA>...<branch> -- <path1> … <pathN> > /tmp/claude/split/<part>.patch
+   git diff --binary --full-index --no-renames <literal-base-SHA>...<branch> -- <path1> … <pathN> > <scratch>/<part>.patch
    ```
 
    **`git diff` has no `--pathspec-from-file`** — verified on git 2.53.0, it exits **129** with git
@@ -119,7 +119,7 @@ why part *k+1* must never be chained off part *k*'s branch (§8).
 3. **Apply it inside `<part-wt>`** — `cd <part-wt>` as its own call, then, as another call, **bare**:
 
    ```
-   git apply --index --whitespace=nowarn /tmp/claude/split/<part>.patch
+   git apply --index --whitespace=nowarn <scratch>/<part>.patch
    ```
 
    Bare, not `-C`-prefixed: `Bash(git apply:*)` matches only the bare form, and `apply` is **not** in
@@ -148,7 +148,7 @@ why part *k+1* must never be chained off part *k*'s branch (§8).
      `<plan-dir>/split/original-log.txt` (Skill Step 1e). `Co-Authored-By:` and `Claude-Session:` are
      re-emitted verbatim from the same archive, because the squashed originals are the only record of
      them once the original branch is deleted.
-5. **Delete `/tmp/claude/split/<part>.patch`** as soon as the commit exists — the same
+5. **Delete `<scratch>/<part>.patch`** as soon as the commit exists — the same
    ephemeral-patch hygiene Skill Step 4 applies to the verification patches. The `.paths` file stays.
 
 ---
@@ -193,10 +193,10 @@ command for the same reason. So, from `<part-wt>` (each its own Bash call):
 
 **Compose the body as a file, not a heredoc.** `block-bash-writes.sh` blocks the
 `--body "$(cat <<'EOF' … EOF)"` shape that `git-push/SKILL.md` prints, so write the body with the
-**Write tool** to `/tmp/claude/split/<part>-pr-body.md` and pass `--body-file`. From `<part-wt>`:
+**Write tool** to `<scratch>/<part>-pr-body.md` and pass `--body-file`. From `<part-wt>`:
 
 ```
-GH_TOKEN=$(<token-generator>) gh pr create --repo <Repo slug> --base <default-branch> --head <part-branch> --title "[<area>] <part scope> (split <k>/<N>)" --body-file /tmp/claude/split/<part>-pr-body.md
+GH_TOKEN=$(<token-generator>) gh pr create --repo <Repo slug> --base <default-branch> --head <part-branch> --title "[<area>] <part scope> (split <k>/<N>)" --body-file <scratch>/<part>-pr-body.md
 ```
 
 `Bash(GH_TOKEN=*gh pr create*)` is allowlisted, and `block-unsafe-push.sh` **requires** the

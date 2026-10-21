@@ -84,17 +84,17 @@ Verified against the installed `gh`:
 So the multi-line cross-link comment **cannot** go through `pr close`. Do not invent a `--body-file`
 flag for it. Use two calls, one Bash call each:
 
-1. **Compose the body with the Write tool** into `/tmp/claude/split/close-comment.md`
+1. **Compose the body with the Write tool** into `<scratch>/close-comment.md`
    (`block-bash-writes.sh` blocks `cat >`, `cat <<EOF`, `tee`, `echo >`, `printf >`; `allow-tmp-access.sh`
    pre-approves `/tmp/claude/`). Content: one line per child part, in merge order — part number, scope,
    `#<part-PR#>` and its full URL — plus the pinned `BASE`, the original head SHA, and a pointer to
    `<plan-dir>/split/` for the archive.
-2. `~/code/.claude/scripts/gh-bot.sh pr comment <original-PR#> --repo <Repo slug> --body-file /tmp/claude/split/close-comment.md`
+2. `~/code/.claude/scripts/gh-bot.sh pr comment <original-PR#> --repo <Repo slug> --body-file <scratch>/close-comment.md`
 3. `~/code/.claude/scripts/gh-bot.sh pr close <original-PR#> --repo <Repo slug> --comment "Split into N sequential PRs - see the comment above"`
 
 The closing `--comment` on (3) is a **single short line with no backticks, no braces and no newlines**,
 so it stays prompt-free; all the substance lives in (2). Passing no `--comment` at all is equally fine.
-Delete `/tmp/claude/split/close-comment.md` afterwards.
+Delete `<scratch>/close-comment.md` afterwards.
 
 `--repo <Repo slug>` is explicit for legibility; the cwd is what picks the App installation, so the
 flag is redundant but harmless — and it is **not** a substitute for being in the sub-repo.
@@ -382,10 +382,8 @@ frontmatter value exists*, so the prompt often shows just two options — or **(
 > skipping the check entirely when the header reads `none`. A membership list, never a contiguous
 > `A-B of N` range: a part's files can come from non-adjacent steps.
 
-Tracked as its own plan in the central store:
-**`~/code/plans/stronghold/open/pr-review-plan-steps-scoping/pr-review-plan-steps-scoping.md`**.
-
-Until it lands, §5b's guidance stands: choose "Skip plan conformance" when `/pr-review` offers it, and
+The plan for this change was dropped (2026-10-21): `/pr-review` is used rarely and not on split parts, so
+it is not scheduled. §5b's guidance stands: choose "Skip plan conformance" when `/pr-review` offers it, and
 if conformance does run, explain the findings as expected artifacts of the split. **Do not** work around
 it by editing the plan, by splitting the plan file per part, or by omitting `Plan-Steps:` from part
 bodies — that header is the input the companion change needs, and writing it today is what makes the

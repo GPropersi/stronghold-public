@@ -4,9 +4,10 @@
 # "Makefile-First Command Policy"). Add targets here rather than allowlisting raw command shapes.
 
 .DEFAULT_GOAL := help
-.PHONY: help facts sync mocks mocks-stop workflow-lint plan-audit plan-sweep wt-new wt-ls wt-rm wt-capacity
+.PHONY: help facts sync tunnel tunnel-stop tunnels mocks mocks-stop workflow-lint plan-audit plan-sweep wt-new wt-ls wt-rm wt-capacity
 
 SYNC := .claude/scripts/stronghold-sync.sh
+QTUNNEL := .claude/scripts/quick-tunnel.sh
 MOCKSERVE := .claude/scripts/mock-server.sh
 FACTS := .claude/scripts/repo-facts.sh
 WT := .claude/scripts/wt.sh
@@ -44,6 +45,15 @@ wt-capacity: ## Machine-wide worktree capacity (read-only)
 
 sync: ## Commit + push stronghold changes to the default branch (MSG="..." for a message)
 	@$(SYNC) "$(MSG)"
+
+tunnel: ## Quick public Cloudflare tunnel to a localhost port: make tunnel PORT=8080 [NAME=foo]
+	@$(QTUNNEL) start "$(PORT)" "$(NAME)"
+
+tunnel-stop: ## Stop a quick tunnel: make tunnel-stop NAME=foo (NAME=all stops every one)
+	@$(QTUNNEL) stop "$(or $(NAME),all)"
+
+tunnels: ## List active quick tunnels and their URLs
+	@$(QTUNNEL) list
 
 mocks: ## Serve ./plans on 127.0.0.1 so a browser tool can screenshot mock HTML (file:// is blocked)
 	@$(MOCKSERVE) start $(PORT)

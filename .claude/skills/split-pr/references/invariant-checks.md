@@ -26,13 +26,13 @@ any expensive step happens. Never reorder it after the build.
 
 One Bash call each (commands are shown as a list, not a table, because the first one contains a pipe):
 
-1. `git diff --name-only --no-renames BASE...<branch> | LC_ALL=C sort > /tmp/claude/split/all-files.txt`
+1. `git diff --name-only --no-renames BASE...<branch> | LC_ALL=C sort > <scratch>/all-files.txt`
    — every path the original branch changed, sorted **byte-wise**.
-2. `LC_ALL=C sort <plan-dir>/split/*.paths > /tmp/claude/split/union-files.txt`
+2. `LC_ALL=C sort <plan-dir>/split/*.paths > <scratch>/union-files.txt`
    — the concatenation of all part pathspecs, sorted the same way.
-3. `comm -3 /tmp/claude/split/all-files.txt /tmp/claude/split/union-files.txt`
+3. `comm -3 <scratch>/all-files.txt <scratch>/union-files.txt`
    — must print **nothing at all**.
-4. `uniq -d /tmp/claude/split/union-files.txt`
+4. `uniq -d <scratch>/union-files.txt`
    — must print **nothing at all**.
 
 > **`LC_ALL=C` on both sorts is mandatory, not hygiene.** `comm` compares byte-wise and *requires*
@@ -218,10 +218,10 @@ One Bash call each:
 
 | #   | Command                                                                                                                     |
 | --- | --------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `git diff --binary --full-index --no-renames BASE...<branch> -- <path1> <path2> … <pathN> > /tmp/claude/split/<part>.patch` |
-| 2   | `test -s /tmp/claude/split/<part>.patch`                                                                                    |
+| 1   | `git diff --binary --full-index --no-renames BASE...<branch> -- <path1> <path2> … <pathN> > <scratch>/<part>.patch` |
+| 2   | `test -s <scratch>/<part>.patch`                                                                                    |
 | 3   | `cd <part-worktree>`                                                                                                        |
-| 4   | `git apply --index --whitespace=nowarn /tmp/claude/split/<part>.patch`                                                      |
+| 4   | `git apply --index --whitespace=nowarn <scratch>/<part>.patch`                                                      |
 
 - `<path1> … <pathN>` is the **literal content** of `<plan-dir>/split/<part>.paths`, read with the
   Read tool and spliced into the command — the same "paste the literal, never a variable" rule as
@@ -443,7 +443,7 @@ against, and continuing silently corrupts the invariant.
 
 **6.2 Rename detection** — a rename whose halves fall in different parts. Looks like: `git apply`
 reporting `No such file or directory` on a `rename from` path, or the union diff showing a rename.
-Confirm: `grep -c '^rename from' /tmp/claude/split/<part>.patch` must be `0`. Do: use `--no-renames`
+Confirm: `grep -c '^rename from' <scratch>/<part>.patch` must be `0`. Do: use `--no-renames`
 on **every** diff — partition check, planner input and build alike. If they disagree, §1's proof does
 not cover what §3 built.
 
@@ -492,7 +492,7 @@ to a subagent — delegate the *analysis* (Skill Step 2's planner) and nothing e
 find yourself executing §3 in a thread where cwd does not persist, the `-C` forms can be made
 prompt-free by keeping `/tmp/claude/` in the command text — `allow-tmp-access.sh` pre-approves any
 Bash command whose **text** matches that prefix, which the patch path already does for `git apply`,
-and which a `> /tmp/claude/split/merge-<part>.txt 2>&1` redirect supplies for `git merge` (desirable
+and which a `> <scratch>/merge-<part>.txt 2>&1` redirect supplies for `git merge` (desirable
 anyway, per the redirect-test-output house rule). Treat that as a documented escape hatch for a
 read-only rehearsal, not as a licence to delegate a real split.
 
@@ -501,7 +501,7 @@ read-only rehearsal, not as a licence to delegate a real split.
 ## 7. Mismatch protocol
 
 1. **Stop.** Skill Step 3 pushes nothing, so nothing is public. Report, do not retry.
-2. **Keep the evidence** — the worktrees, the `/tmp/claude/split/*.patch` files and both tree hashes.
+2. **Keep the evidence** — the worktrees, the `<scratch>/*.patch` files and both tree hashes.
 3. **Walk §6 in order.** 6.1–6.4 cover nearly every real case.
 4. **A planner defect** (a file in no part, a file in two, an atom cut, a mis-declared seam) goes back
    to **Skill Step 2** with the specific defect, and the planner re-runs. **Never hand-edit a `.paths`

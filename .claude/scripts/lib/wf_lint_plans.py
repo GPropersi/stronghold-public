@@ -14,7 +14,7 @@ import wf_lint_base as base
 import plan_lifecycle
 
 STATES = ("open", "completed")
-BUCKET_ENTRIES = {"open", "completed", "research"}
+BUCKET_ENTRIES = {"open", "completed", "research", "external-reviews"}
 TOPIC_FOLDERS = {"reviews", "research", "mocks", "mockup", "mockups", "tmp", "screenshots"}
 WT_RESOLVE = Path(__file__).resolve().parent.parent / "wt-resolve.sh"
 
@@ -249,7 +249,7 @@ def _check_bucket(ctx: base.Context, bucket_dir: Path) -> list[base.Finding]:
     for entry in sorted(bucket_dir.iterdir()):
         if entry.name not in BUCKET_ENTRIES:
             out.append(base.Finding("warn", "plans.layout-valid", ctx.rel(entry),
-                                    "unexpected entry in a plans bucket (expected open/ completed/ research/)", repo))
+                                    "unexpected entry in a plans bucket (expected open/ completed/ research/ external-reviews/)", repo))
     names: dict[str, set[str]] = {}
     for state in STATES:
         state_dir = bucket_dir / state

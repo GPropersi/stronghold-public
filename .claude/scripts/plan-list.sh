@@ -7,6 +7,7 @@
 #   ~/code/plans/<repo>/open/<topic>/<name>.md
 #   ~/code/plans/<repo>/completed/<topic>/<name>.md
 #   ~/code/plans/<repo>/research/        (standalone research — NOT listed here)
+#   ~/code/plans/<repo>/external-reviews/ (/pr-review of other contributors' PRs — NOT listed here)
 #
 # Usage:
 #   plan-list.sh                 every repo, grouped by repo then Open/Completed

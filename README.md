@@ -192,7 +192,7 @@ sequenceDiagram
 | Execute | `run-plan`, `next-step-taker`, `run-review` |
 | Ship | `git-commit`, `git-push`, `split-pr` |
 | After the PR | `pr-review`, `pr-review-fixer`, `gmas` |
-| Utilities | `git-changes-summary`, `test-failure-logger`, `format-table`, `skill-creator` |
+| Utilities | `git-changes-summary`, `test-failure-logger`, `format-table`, `skill-creator`, `tunnel` |
 
 ---
 

@@ -18,9 +18,9 @@ Run these from inside the sub-repo checkout (`~/code/<repo-dir>`), substituting 
 
 | #   | Command                                                                                   | Produces                                              |
 | --- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| 1   | `git diff --name-status --no-renames BASE...<branch> > /tmp/claude/split/name-status.txt` | the authoritative file list with `A`/`M`/`D` status   |
-| 2   | `git diff --no-renames BASE...<branch> > /tmp/claude/split/net.diff`                      | every file's **net** diff, in one file                |
-| 3   | `git diff --stat --no-renames BASE...<branch> > /tmp/claude/split/stat.txt`               | per-file line counts, for the AskUserQuestion summary |
+| 1   | `git diff --name-status --no-renames BASE...<branch> > <scratch>/name-status.txt` | the authoritative file list with `A`/`M`/`D` status   |
+| 2   | `git diff --no-renames BASE...<branch> > <scratch>/net.diff`                      | every file's **net** diff, in one file                |
+| 3   | `git diff --stat --no-renames BASE...<branch> > <scratch>/stat.txt`               | per-file line counts, for the AskUserQuestion summary |
 
 - **`BASE...<branch>` (three dots) is the net diff** against the merge base, so "a later commit
   modified an earlier commit's file" is already collapsed — that failure mode does not exist here.
@@ -272,7 +272,7 @@ part PR's `Plan-Steps:` header, so it is never re-derived in a later, context-fr
 
 ## 2. Required output
 
-Write **one markdown file** to the path the orchestrator gives you (under `/tmp/claude/split/`) with
+Write **one markdown file** to the path the orchestrator gives you (under `<scratch>/`) with
 the **Write tool** — never `cat >`, `cat <<EOF`, `tee`, `echo >` or `printf >`
 (`block-bash-writes.sh` denies all of them, and a heredoc containing braces and quotes trips the
 brace+quote guard). Reply with the single line `Written to <path>` and nothing else.

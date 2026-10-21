@@ -60,6 +60,19 @@ it supplies the branch, repo-dir and entry evidence (see "Handoff file" in that 
 > entries use does not resolve from a sub-repo cwd. **Always spell it
 > `~/code/.claude/scripts/gh-bot.sh`** — it has its own allow entry and still resolves the App from cwd.
 
+> **Scratch namespace (`<scratch>`) — never the bare `/tmp/claude/split/`.** Two splits can run on
+> one host at once (different repos, or two branches of one repo), and `/tmp/claude/split/` is shared,
+> so un-namespaced `<part>.patch`/`<part>-pr-body.md` names collide and a cleanup `rm` deletes another
+> run's files (observed: app-main's `P1.patch` and app-notifs' `p1-pr-body.md`). Resolve once, in 1a:
+> `<scratch>` = `/tmp/claude/split/<repo-dir>-<branch-slug>/`, where `<branch-slug>` is the **original**
+> branch with `/` replaced by `-` (e.g. `/tmp/claude/split/app-main-feat-url-shortener/`). Create it with
+> `mkdir -p <scratch>` as its own Bash call before the first redirect, and use it for every scratch
+> file this skill names, gate redirects and PR bodies included. Cleanup deletes **only** files inside
+> `<scratch>` (`rm -rf <scratch>` once the split is fully merged), never a glob on `/tmp/claude/split/`.
+> Each part's PR body is `<scratch>/<part>-pr-body.md`; never reuse a name from outside `<scratch>`.
+> Before writing any file there, if the Write tool reports it already exists unread, it is not yours:
+> stop and re-check `<scratch>`.
+
 ## Seam keys this skill reads
 
 | Seam key            | Used for                                                                                                   | Fallback when absent                                                                                                                                      |
@@ -247,7 +260,7 @@ with an unverified provenance archive.
 `review-threads.md` and `original-pr.md` are Write-tool files. The two raw-git captures are ordinary
 redirects of git output rather than those blocked shapes, and
 `Bash(git format-patch:*)` / `Bash(git log:*)` match regardless of the redirect target; if either
-still prompts, redirect into `/tmp/claude/split/` (pre-approved by `allow-tmp-access.sh`, which also
+still prompts, redirect into `<scratch>/` (pre-approved by `allow-tmp-access.sh`, which also
 pre-approves the `git diff > file` captures used from Skill Step 2 onward) and re-emit the content
 into `<plan-dir>/split/` with the Write tool.
 
@@ -259,9 +272,9 @@ acceptance before anything is built. **Delegate the analysis; own the gate and t
 **2a. Produce the input.** From inside `~/code/<repo-dir>`, substituting the **literal** pinned `BASE`
 SHA from 1d (never `$BASE`), one Bash call each:
 
-- `git diff --name-status --no-renames BASE...<branch> > /tmp/claude/split/name-status.txt`
-- `git diff --no-renames BASE...<branch> > /tmp/claude/split/net.diff`
-- `git diff --stat --no-renames BASE...<branch> > /tmp/claude/split/stat.txt`
+- `git diff --name-status --no-renames BASE...<branch> > <scratch>/name-status.txt`
+- `git diff --no-renames BASE...<branch> > <scratch>/net.diff`
+- `git diff --stat --no-renames BASE...<branch> > <scratch>/stat.txt`
 
 `BASE...<branch>` (three dots) is the **net** diff against the merge base, so "a later commit modified
 an earlier commit's file" is already collapsed. `--no-renames` is **mandatory**: a one-sided rename in
@@ -348,7 +361,7 @@ them through the repo's **own** worktree target with its base-ref override (app-
 by construction. Run `make -C ~/code wt-capacity REPO=<repo-dir>` first. Reference §2.
 
 **3c. Build each part.** `git diff --binary --full-index --no-renames BASE...<branch> -- <literal
-paths> > /tmp/claude/split/<part>.patch`, then — a **separate** Bash call, bare, from inside that
+paths> > <scratch>/<part>.patch`, then — a **separate** Bash call, bare, from inside that
 part's worktree — `git apply --index --whitespace=nowarn …`. **`git diff` has no
 `--pathspec-from-file`** (verified: exit 129), so the `.paths` lines are spliced in literally. **Never
 `--3way` on the first pass**: it can synthesize content and silently break the invariant. §3 also
@@ -393,7 +406,7 @@ correcting **seven** assumptions inherited here.
 - **4e.** Write **`built-and-verified`** to the manifest `status` column **per part, here and only here**,
   after that part's built run — Skill Step 3 wrote nothing. Skill Step 1b's resume reads it. §4.
 - **4f.** Only then clean up: every verification worktree **and its live stack**, its throwaway branch,
-  the ephemeral `/tmp/claude/split/*.patch` — **never** `<plan-dir>/split/<part>.paths`. `down` a green
+  the ephemeral `<scratch>/*.patch` — **never** `<plan-dir>/split/<part>.paths`. `down` a green
   part's stack between parts. §5.
 
 ### 5. The sequential push → PR → CI → merge loop
@@ -417,7 +430,7 @@ does not persist in a subagent.
   `--pathspec-from-file`**: exit 129). Apply **bare** inside the part's worktree, then commit with one
   single-line `-m` plus repeated **`--trailer`** flags (`Original-Commit:` listing the squashed SHAs,
   plus `Co-Authored-By:` and `Claude-Session:`) — a heredoc message is blocked, and repeated `-m` would
-  split the trailer block into paragraphs. Delete `/tmp/claude/split/<part>.patch` afterwards. §3.
+  split the trailer block into paragraphs. Delete `<scratch>/<part>.patch` afterwards. §3.
 - **5c. Gate, then push.** `~/code/.claude/scripts/push-gate.sh <part-branch>` is a **hard
   precondition, not `/git-push`'s business**: `<bot-push-script>` exits 6 without a passing result for
   the exact HEAD sha, and `require-push-gate.sh` refuses the call. `git push` runs as **its own Bash call

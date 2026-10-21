@@ -54,7 +54,7 @@ tag) so SKILL.md itself stays repo-agnostic.
   pin a base. See `invariant-checks.md` §2. **Nothing is cleaned up until every part has passed §1-§3**,
   because a failure sends you back into that part's tree to read it.
 - **Redirect every gate's output to a file and read the file** — `make -C <worktree> <target>
-  > /tmp/claude/split-<part>-<target>.txt 2>&1`, then Read it. Never capture a test run inline
+  > <scratch>/<part>-<target>.txt 2>&1`, then Read it. Never capture a test run inline
   (`~/code/CLAUDE.md` → Test output). Delete the files in §5.
 - **Stop rule 1 — a local failure stops the run.** Report the part, the target, the failing test and
   the excerpt from the redirect file. Then investigate it properly (`~/code/CLAUDE.md` → Test
@@ -227,7 +227,7 @@ branch stay (a later failure sends you back into that tree to read it), but a ru
 2. **Delete the throwaway verification branches** (`split/<topic>-verify-<part>` and
    `split/<topic>-verify-union`). These are not the part PR branches: Skill Step 5 cuts those fresh
    from the then-current `origin/<default-branch>`.
-3. **Delete the run's ephemeral scratch** — `/tmp/claude/split/*.patch` and the gate redirect files.
+3. **Delete the run's ephemeral scratch** — `<scratch>/*.patch` and the gate redirect files.
 4. **Keep the canonical pathspec files.** `<plan-dir>/split/<part>.paths` lives **durably** in the
    stronghold plan folder (Skill Step 2e's schema). Skill Step 5 rebuilds each part's patch from it,
    and the resume path reads it. **Never delete it, never hand-edit it.**
@@ -291,7 +291,7 @@ exactly this one exception — vitest is host-native and mode-independent.
 
 ### 6b. Gate sequences
 
-Each line is its own Bash call, with `> /tmp/claude/split-<part>-<n>.txt 2>&1` appended.
+Each line is its own Bash call, with `> <scratch>/<part>-<n>.txt 2>&1` appended.
 `<wt>` is that part's verification worktree.
 
 **Every sequence below is preceded by §0's two preambles, in this order** — they are not optional and
