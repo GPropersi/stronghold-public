@@ -29,8 +29,10 @@ main{max-width:60rem;margin:0 auto;padding:1rem}
 #live{margin-bottom:.5rem;min-height:1.5rem}
 .banner{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;padding:.5rem .75rem;margin-top:.25rem;border:1px solid var(--danger);border-radius:var(--radius);background:var(--danger-bg);color:var(--danger)}
 h2{font-size:1rem;margin:1.5rem 0 .5rem;display:flex;flex-wrap:wrap;gap:.25rem 1rem;justify-content:space-between;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-h3.grp{font-size:.875rem;margin:1rem 0 .5rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+h3.grp{display:flex;align-items:center;gap:.6rem;font-size:.875rem;margin:1rem 0 .5rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .card{background:var(--panel);border:1px solid var(--rule);border-radius:var(--radius);margin-bottom:.5rem;padding:.25rem 1rem .75rem}
+a.prlink{font-weight:700}
+a.prlink.prdone{font-weight:400;color:var(--muted)}
 .about{margin:.25rem 0 .5rem;font-size:.9rem;line-height:1.5;color:var(--ink)}
 .card{cursor:pointer}
 .card .steps,.card .derr{cursor:auto}
@@ -368,11 +370,12 @@ function stampUpdated(){
 }
 
 /* ---------- cards ---------- */
+function isHttps(u){return typeof u==='string'&&u.startsWith('https://')}
 function issueNode(p){
   if(p.issue==null){return el('span','muted mono','no issue')}
   if(p.issue==='none'){return el('span','muted mono','waived')}
   var label='issue #'+p.issue;
-  if(typeof p.issue_url==='string'&&p.issue_url.startsWith('https://')){
+  if(isHttps(p.issue_url)){
     var a=el('a','mono',label);a.href=p.issue_url;a.rel='noopener noreferrer';return a;
   }
   return el('span','muted mono',label);
@@ -396,6 +399,12 @@ function buildInfo(rec,p){
   }
   row.appendChild(pillBtn(p.state==='completed'?'p-done':'p-open',p.state,statusFilter===p.state,function(){setStatus(statusFilter===p.state?'all':p.state)}));
   row.appendChild(issueNode(p));
+  (p.prs||[]).forEach(function(pr){
+    if(!isHttps(pr.url)){return}
+    var a=el('a','mono prlink'+(pr.done?' prdone':''),'PR #'+pr.number+(pr.done?' ✓':' · in review'));
+    a.href=pr.url;a.rel='noopener noreferrer';a.title=pr.repo+' pull request #'+pr.number+(pr.done?' (merged or closed)':' (not merged yet)');
+    row.appendChild(a);
+  });
   var meta=el('div','meta');
   if(p.branch){meta.appendChild(el('span','mono','branch: '+p.branch))}
   meta.appendChild(el('span',null,p.step_count+(p.step_count===1?' step':' steps')));
@@ -783,6 +792,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!drawerEl.h
 document.addEventListener('click',function(e){
   if(!drawerEl.hidden&&!drawerEl.contains(e.target)&&!menuBtn.contains(e.target)){setDrawer(false,false)}
 });
+function inReview(p){return (p.prs||[]).some(function(pr){return !pr.done})}
 function planKey(p){return p.repo+'/'+p.state+'/'+p.topic+'/'+p.name}
 function stwCls(w){return 'stw '+(DONE_WORDS.indexOf(w)>=0?'stw-done':(w==='todo'?'stw-todo':'stw-other'))}
 function homeSection(title,key){
@@ -806,14 +816,42 @@ function homeSection(title,key){
   s.appendChild(s.body);
   return s;
 }
+var flightGroups=new Map();
+function flightGroup(repo){
+  var g=flightGroups.get(repo);
+  if(g){return g}
+  g={};
+  g.head=el('h3','grp');
+  var btn=el('button','sechead');
+  btn.type='button';
+  btn.appendChild(el('span','chev'));
+  btn.appendChild(el('span',null,repo));
+  g.countEl=el('span','mono');
+  g.head.appendChild(btn);g.head.appendChild(g.countEl);
+  g.body=el('div');
+  g.body.id='flight-'+repo;
+  btn.setAttribute('aria-controls',g.body.id);
+  var open=store('plans.col.flight.'+repo)!=='1';
+  function paint(){btn.setAttribute('aria-expanded',open?'true':'false');g.body.hidden=!open}
+  btn.addEventListener('click',function(){open=!open;save('plans.col.flight.'+repo,open?'0':'1');paint()});
+  paint();
+  flightGroups.set(repo,g);
+  return g;
+}
 var inflightSec=homeSection('In flight','inflight'),upnextSec=homeSection('Up next','upnext');
 function homeBlocks(inflight,seen){
   var nodes=[];
   if(!inflight.length){return nodes}
-  var kids=[],lastRepo=null;
+  var kids=[],byRepo=new Map();
   inflight.forEach(function(p){
-    if(p.repo!==lastRepo){kids.push(el('h3','grp',p.repo));lastRepo=p.repo}
-    kids=kids.concat(cardsFor([p],null,true,seen));
+    if(!byRepo.has(p.repo)){byRepo.set(p.repo,[])}
+    byRepo.get(p.repo).push(p);
+  });
+  byRepo.forEach(function(plans,repo){
+    var g=flightGroup(repo);
+    syncChildren(g.body,cardsFor(plans,null,true,seen));
+    g.countEl.textContent=plans.length;
+    kids.push(g.head,g.body);
   });
   syncChildren(inflightSec.body,kids);
   inflightSec.countEl.textContent=inflight.length+' started';
@@ -856,7 +894,7 @@ function render(data){
   var home=!repoFilter&&statusFilter==="all"&&!kindFilter;
   var inflight=[];
   if(home){
-    data.repos.forEach(function(r){r.plans.forEach(function(p){if(p.state!=='completed'&&p.done>0&&matchKind(p)){inflight.push(p)}})});
+    data.repos.forEach(function(r){r.plans.forEach(function(p){if(((p.state!=='completed'&&p.done>0)||inReview(p))&&matchKind(p)){inflight.push(p)}})});
   }
   var inflightKeys=new Set(inflight.map(planKey));
   shown+=inflight.length;

@@ -408,6 +408,20 @@ For any plan involving a **new feature or bug fix** (not pure refactoring or cle
 
 **Implementation standards:** the framework-specific test-layer choices (which test type for backend vs. frontend logic vs. navigation flows) are **stack-bound** — apply the repo's Stack reference file. For `flask-jinja-vanillajs-vite`, see `references/stack/flask-jinja-vanillajs-vite.md`. Absent a matching stack file, choose test layers by the repo's declared **Commands** and existing test patterns.
 
+## Approved Defaults (write these in up front)
+
+Distilled from the user's recorded answers to ~1,950 past review decisions. `/plan-reviewer` raised each of these as a question and the user picked the same side nearly every time, so build them into the plan instead of leaving them for review:
+
+- **Tests ship with the logic.** Every step that adds or changes branching, a guard, a fail-closed path or an error path includes its test in that same step, at the layer where the failure would show (real DOM or Playwright for UI behaviour, integration for DB/HTTP). Never "covered indirectly" or "add later".
+- **Each step is green alone.** Nothing in a step references a file, route, target, helper or marker a later step creates; pull the stub or helper forward. State each step's verify command (an existing `make` target) and what a failure there usually means (inline hints for plans of roughly 8 steps or fewer; one shared "Common failure modes" section for longer plans).
+- **Symbol anchors, never line numbers**, as the primary locator; a line number only as "around line N" next to a search term.
+- **Fill specification gaps with the named mechanism.** Say which existing function, file, constant or fixture is reused (read it first), what the default is, and put the contract in Must-be-true. Prefer a dedicated constant or string over reusing a loosely related one, and extract a helper when logic repeats in 3+ places. When mirroring a precedent, cite it with its path.
+- **Accessibility is part of any new UI step:** focus return after dismiss, accessible name for icon-only controls, a live region for async results, touch targets of at least 44px on mobile.
+- **Scripts, hooks, infra and concurrency get the guard, not a caveat.** Specify the lock, atomic write, timeout, bounded wait or destructive-target guard plus its test; default to fail-closed. Do not offer "accept and document the residual risk" as the lead option for these.
+- **Docs move with the behaviour.** A step that changes behaviour updates the docs and comments it makes wrong in the same step; if the claim can be enforced by a cheap test or check, add that instead of weakening the claim.
+- **Fix adjacent defects in files the plan already touches** instead of listing them as follow-ups.
+- **When you must leave a choice open, write it as a reviewer would:** mark one option `(Recommended)`, label a leave-as-is option `(status quo)` without putting it first for that reason, state each option's downside in its own text, and offer an "A plus B" option when the choices are not exclusive.
+
 ## Step 4: Create GitHub Issue
 
 After the plan file is written and cross-linked, create a corresponding GitHub issue and link it to the plan via YAML frontmatter. The issue is the publicly-visible **WHY**; the plan stays the source of truth for the HOW.

@@ -134,6 +134,10 @@ Merges are what close most issues, but an umbrella or a multi-PR plan can leave 
 
 For each repo cleaned in 5b, run `~/code/.claude/scripts/plan-lifecycle.sh reconcile <repo-dir> --merged` as its own standalone Bash call. It ticks `(post-merge)` boxes and promotes master Status lines for merged PRs. Failures are non-fatal, like 5b: note them and continue. When it printed any `ticked` or `status` line, finish with `.claude/scripts/stronghold-sync.sh "plans(<repo>): reconcile merged"` as its own call, because the reconcile edits plan files in the stronghold and would otherwise sit uncommitted.
 
+### 5d. Record merged PRs for the dashboard
+
+Run `~/code/.claude/scripts/plan-pr-sync.sh` once (not per repo) as its own standalone Bash call. It writes `pr_done:` frontmatter for linked PRs that merged or closed, so the plans dashboard stops showing those plans as in review. Non-fatal like 5b/5c. When it printed `N plan(s) updated` with N above 0, finish with `.claude/scripts/stronghold-sync.sh "plans: record merged PRs"` as its own call.
+
 ### 6. Report
 
 One-line summary:

@@ -36,6 +36,16 @@ Single findings with no co-located finding from another reviewer on the same ste
 
 **Note:** Two findings on the same step about *different aspects* are NOT duplicates or conflicts — e.g., one reviewer flagging a missing import and another reviewer flagging a wrong type annotation on the same step are both `unique`. Only classify as duplicate/conflict when the findings address the *same specific issue*.
 
+## Step 3b — Resolution tier for each design decision
+
+Read `references/auto-resolve-rules.md` (beside this file) once. For every finding with `fix_type: "design_decision"` set `auto_resolution` to `{ "tier": "auto" | "confirm" | "ask", "rule": "R1" | null, "select": "<bare option id>" | null }` by applying that file's rules to the finding's `description`, `fix_description` and `design_options` text only — never from your own judgement of what the user would want.
+
+- Fire at most one rule, and only if its signal is clearly present and no guardrail trips; any doubt means `tier: "ask"`, `rule: null`, `select: null`.
+- `classification: "conflict"` findings, `severity: "critical"` findings, and findings whose `ask` class is security-boundary, legal, data-migration, destructive-irreversible, public-contract or workflow-policy are always `tier: "ask"`.
+- `select` is the bare id of the option in `design_options` (A, B, 1, 2), never with markers. If `design_options` entries carry no ids, assign `A`, `B`, ... in list order and use those.
+- Also set `recommended` on every design_decision finding to the bare id of the option the reviewer marked `(Recommended)`, or null when none is marked.
+- If the rules file says `Mode: shadow`, set `tier: "ask"` for every finding but keep the would-be pick in `shadow_rule` / `shadow_select`.
+
 ## Step 4 — Write output
 
 Write these files **using the `Write` tool** — NEVER `cat <<EOF`, `python3 << 'EOF'`, `cat >`, `tee`, `printf >`, `echo >`, or any Bash heredoc/redirect. Any heredoc or inline script containing `{` and quotes triggers the brace+quote security prompt; the `Write` tool bypasses this. Two fixed files (`coordinator.md`, `coordinator-summary.md`) plus one pre-split `fix-batch-N.md` file per ~6 mechanical findings.
@@ -78,6 +88,8 @@ Write the following JSON. **Only include keys in `reviewer_verdicts`, `summaries
       "fix_type": "mechanical" | "design_decision",
       "fix_description": "...",
       "design_options": ["option A", "option B"],
+      "recommended": "A" | null,
+      "auto_resolution": { "tier": "auto" | "confirm" | "ask", "rule": "R1" | null, "select": "A" | null, "shadow_rule": null, "shadow_select": null },
       "classification": "unique" | "duplicate" | "conflict",
       "sources": ["<reviewer name>"],
       "options": [
@@ -115,11 +127,14 @@ Write a short summary JSON that the orchestrator reads instead of the full findi
   ],
   "design_decision_options": {
     "DD title 1": ["Option A: short description", "Option B: short description"]
+  },
+  "dd_resolution": {
+    "DD title 1": { "tier": "auto" | "confirm" | "ask", "rule": "R1" | null, "select": "A" | null, "recommended": "A" | null, "shadow_rule": null, "shadow_select": null }
   }
 }
 ```
 
-**`design_decision_options` is REQUIRED.** The orchestrator presents DDs to the user via AskUserQuestion using only `coordinator-summary.md` — it never reads `coordinator.md` directly. Every DD title in `design_decision_titles` must have a corresponding entry in `design_decision_options`.
+**`design_decision_options` and `dd_resolution` are REQUIRED.** The orchestrator presents DDs to the user via AskUserQuestion using only `coordinator-summary.md` — it never reads `coordinator.md` directly. Every DD title in `design_decision_titles` must have a corresponding entry in both maps. `design_decision_count` counts all tiers.
 
 **On Pass 2+: Prior-fix verification (you perform it; there is no separate verifier subagent).** Pass 1 skips this. On every later pass, before computing `mechanical_count` and the fix-batch files:
 

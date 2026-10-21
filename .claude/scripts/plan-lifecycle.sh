@@ -4,7 +4,7 @@
 #
 # Usage:
 #   plan-lifecycle.sh complete <repo> <topic> [--dry-run]       verify finished, git mv open/ -> completed/, close its issues
-#   plan-lifecycle.sh close-issues <repo> [<topic>] [--dry-run] close the open issue of every completed plan
+#   plan-lifecycle.sh close-issues <repo> [<topic>] [--dry-run] close the open issue of every completed plan (PR repos: only once a merged PR is found)
 #   plan-lifecycle.sh audit [<repo>]                            report completed plans with open issues + open topics with no plan
 #   plan-lifecycle.sh sweep [<repo>] [--dry-run]                move plan-less (review-only) open topics to completed/
 #   plan-lifecycle.sh backfill [--dry-run] [--only <rule>] [--force]  migrate the whole store to the plan schema (rules a-g)

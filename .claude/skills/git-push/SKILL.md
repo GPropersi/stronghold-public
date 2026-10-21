@@ -659,6 +659,16 @@ After creating or updating the PR, verify GitHub's own parse of the body, from `
 
 `--expect` lists exactly the issues this PR should close: `<plan-issue-number>`, plus `<master-issue-number>` only when `<is-final-phase>=true`, or `none` when no `Closes` line was added. The script compares the PR's `closingIssuesReferences` with that set; for an unexpected issue it rewrites the closing keyword in the body to `reference` and re-checks. Exit 0 = exact match. Exit 1 = still wrong (a `MISSING` line means the `Closes` line was not written: fix the body and rerun; an unfixable `UNEXPECTED` is linked by hand or by a commit message: report it, never merge). Exit 4 = could not check: STOP and report.
 
+#### Link the PR to the plan (script)
+
+Right after the PR is created or updated, record its URL in the plan so the plans dashboard shows it before the PR merges. When Step 2c found a `<plan-file>`, run (any cwd; idempotent, so run it on every push):
+
+```bash
+~/code/.claude/scripts/plan-pr-link.sh add <plan-file> <PR_URL>
+```
+
+It adds the URL to the plan's `pr_urls:` frontmatter key. Exit 3 (no frontmatter) or 2 (not a GitHub PR URL) is a warning to report, never a reason to stop the push. Skip when the PR has no plan (Step 2d no-plan PRs). Step 10's stronghold sync carries the plan edit.
+
 #### After PR Creation
 
 Output:

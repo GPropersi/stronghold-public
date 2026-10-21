@@ -431,6 +431,10 @@ does not persist in a subagent.
   the Write tool and pass `--body-file` (a heredoc body is blocked); board, assignee and the **PR
   reviewer** seam's reviewer come from `pr-finish.sh`, which already reuses `git-push`'s
   `references/graphql/*.graphql` — never re-author that GraphQL inline. §5.
+- **5d′. Link the part's PR to the plan** (so the plans dashboard shows every part before it merges): once the PR is
+  open, run `~/code/.claude/scripts/plan-pr-link.sh add <plan-file> <part-PR-URL>` with the plan file resolved in 1a
+  (idempotent; skip for the unrelated-changes part and when the branch has no plan; exit 2/3 is a warning to report,
+  not a stop). 5i's sync carries the edit.
 - **5e. Issue wiring:** only the **last** part in merge order carries `Closes #<issue>`; every earlier
   part carries `Part of #<issue>`; the unrelated-changes part gets its **own** issue, since it is not
   part of the original work. The trap: `/git-push` appends `Closes` automatically, so reused naively all

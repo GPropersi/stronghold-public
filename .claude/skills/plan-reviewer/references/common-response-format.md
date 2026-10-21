@@ -74,7 +74,12 @@ For `mechanical` findings, `fix_description` must contain the exact edit: what t
 - Choosing between keeping backward compatibility vs. clean break
 - Any fix that changes control flow, event binding, or runtime behavior
 
-For `design_decision` findings, `fix_description` must describe the decision needed. `design_options` must list at least 2 concrete options with enough detail to evaluate trade-offs.
+For `design_decision` findings, `fix_description` must describe the decision needed. `design_options` must list at least 2 concrete options with enough detail to evaluate trade-offs. The coordinator decides from this text alone whether the user needs to be asked (`references/auto-resolve-rules.md`), so each DD must also follow these rules:
+- **Mark your recommendation.** Put `(Recommended)` on exactly one option when you have one; mark none if you genuinely do not. List order is never a signal, and a status-quo option ("leave as-is", "accept", "defer") is labelled `(status quo)` and not placed first for being the status quo.
+- **State each option's downside in its own text**, and say whether it is a consequence (changes shipped behaviour, rejects a legitimate case, only partly fixes the problem, needs restructuring, widens scope) or only effort (more code, larger diff, extra test). "Cheapest" and "simplest" are not downsides.
+- **Offer a combined option** ("A plus B") when two options are not mutually exclusive, instead of making the user pick one.
+- **Say when options differ only in form** (test layer, inline vs consolidated, which file) and cite any existing named pattern one of them mirrors, with its location.
+- **Cite the precedent with a location** (path or file:line) whenever an option says it mirrors existing code, and only after reading that file.
 
 **Default to `design_decision`** when uncertain. The cost of asking is low; the cost of a bad auto-applied fix is high.
 

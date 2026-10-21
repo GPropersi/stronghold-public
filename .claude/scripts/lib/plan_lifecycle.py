@@ -12,7 +12,8 @@ Commands (<repo> is a sub-repo DIRECTORY name or `stronghold`, mapped to a bucke
   close-issues <repo> [<topic>] [--dry-run]
                                         close the OPEN GitHub issue of every completed plan (one topic or all). An issue
                                         also named by a plan still in open/, or by an OPEN PR's closing references, is
-                                        left open.
+                                        left open. In a PR repo an issue is closed only once a MERGED PR is found for the
+                                        plan's `branch:` or closing the issue (finished plans are archived before merging).
   audit [<repo>]                        report drift, exit 1 when any: a completed plan whose issue is still open
                                         (ISSUE-OPEN) and a review-only open/ topic: no plan file, a push review, no research/mocks (ORPHAN). Info only: a
                                         closed issue on a still-open plan (ISSUE-CLOSED), an open issue awaiting an open
@@ -207,6 +208,22 @@ class Store:
             raise Unavailable(f"unparsable PR list for {bucket}: {exc}") from exc
         return held
 
+    def merged_evidence(self, bucket: str) -> tuple[set[str], set[int]] | None:
+        """(head branches, closing-reference issue numbers) of MERGED PRs; None for a no-PR bucket."""
+        if bucket in self.ctx.cfg["fixed_buckets"].values():
+            return None
+        out = self.run_gh(bucket, "pr", "list", "--repo", self.slug_for(bucket), "--state", "merged", "--limit", "1000", "--json", "number,headRefName,closingIssuesReferences")
+        branches: set[str] = set()
+        issues: set[int] = set()
+        try:
+            for pr in json.loads(out or "[]"):
+                if pr.get("headRefName"):
+                    branches.add(str(pr["headRefName"]))
+                issues.update(int(ref["number"]) for ref in pr.get("closingIssuesReferences") or [])
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            raise Unavailable(f"unparsable merged PR list for {bucket}: {exc}") from exc
+        return branches, issues
+
     def close_issue(self, bucket: str, number: int, why: str) -> None:
         self.run_gh(bucket, "issue", "close", str(number), "--repo", self.slug_for(bucket), "--reason", "completed", "--comment", why)
         self._states.get(bucket, {})[number] = "CLOSED"
@@ -227,6 +244,7 @@ def close_for_plans(
     states = store.issue_states(bucket)
     held_open = store.open_issue_numbers(bucket, ignore_topic)
     held_by_pr = store.pr_held(bucket)
+    merged = store.merged_evidence(bucket)
     closed = failed = 0
     done: set[int] = set()
     for plan, number in plans:
@@ -243,6 +261,8 @@ def close_for_plans(
             print(f"issue    #{number} left open: a plan still in open/ names it")
         elif number in held_by_pr:
             print(f"issue    #{number} left open: PR #{held_by_pr[number]} will close it on merge")
+        elif merged is not None and number not in merged[1] and wf_frontmatter.parse(plan).get("branch", "") not in merged[0]:
+            print(f"issue    #{number} left open: no merged PR found for its branch or issue")
         elif dry_run:
             print(f"issue    #{number} would be closed ({plan.parent.parent.name}/{plan.parent.name}/{plan.stem})")
         else:

@@ -185,6 +185,7 @@ The coordinator subagent prompt:
 >    - `design_decision_count`: number of findings with `fix_type: "design_decision"`
 >    - `design_decision_titles`: list of DD finding titles (one line each) — the orchestrator needs these for AskUserQuestion prompts
 >    - `design_decision_options`: **REQUIRED** — map of DD title → array of option strings (e.g., `{"DD title 1": ["Option A: description", "Option B: description"]}`). The orchestrator uses this to present DDs without reading the full coordinator file.
+>    - `dd_resolution`: **REQUIRED** — map of DD title → `{tier, rule, select, recommended, shadow_rule, shadow_select}` from the coordinator's Step 3b (`references/auto-resolve-rules.md`). `tier` is `auto`, `confirm` or `ask`.
 > 3. **`<plan-dir>/tmp/fix-batch-1.md`, `fix-batch-2.md`, ...** — the mechanical-fix_type findings ONLY, pre-split into fixed-size batches of **6**, in the same order they appear in `coordinator.md`'s `findings` array. Batch count = `ceil(mechanical_count / 6)`. Every mechanical finding — including any merged from `prior-fix-regressions.md` — appears in exactly one batch file; the last batch may have fewer than 6. Each batch file:
 >    ```json
 >    { "batch": N, "findings": [ { "index": <1-based index across ALL mechanical findings>, "title": "...", "step": "Step N", "file": "path/to/file (if applicable)", "fix_description": "...", "evidence": "... (if present on the finding)" } ] }
@@ -224,9 +225,13 @@ Launch **one fixing subagent per batch file** (`batch_count` subagents total, al
 
 ### Step 5: Present Design Decisions via AskUserQuestion
 
-The orchestrator has the DD titles and options from `coordinator-summary.md` (`design_decision_titles` and `design_decision_options` — both REQUIRED fields). Use these to construct AskUserQuestion prompts without reading the full coordinator file.
+The orchestrator has the DD titles, options and tiers from `coordinator-summary.md` (`design_decision_titles`, `design_decision_options`, `dd_resolution` — all REQUIRED). Use these to construct prompts without reading the full coordinator file. Each DD takes one of three paths by its `dd_resolution.tier` (rules and measured accuracy: `references/auto-resolve-rules.md`):
 
-Present each design decision using `AskUserQuestion`:
+**`auto` tier — do not ask.** Treat `select` as the user's answer for Step 6, tagged `auto-resolved: <rule>`. These appear in the Step 8a summary so the user can revert any of them. A revert re-opens that DD through the `ask` path below and re-applies via Step 6.
+
+**`confirm` tier — one batched question.** Print a table of DD id, finding title, rule and the pre-filled pick, then ask ONE `AskUserQuestion` ("Accept N pre-filled picks?") with options **Accept all (Recommended)** and **Review individually**. On Accept all, treat each `select` as the answer, tagged `accepted pre-filled: <rule>`. On Review individually, move those DDs to the `ask` path.
+
+**`ask` tier — one `AskUserQuestion` per DD** (and any `confirm` DDs sent here):
 
 **Constraints:**
 - Max 4 questions per call, each with max 4 options
@@ -236,15 +241,17 @@ Present each design decision using `AskUserQuestion`:
 **Mapping:**
 - `question`: `"DD-N: [Step M] <finding title>?"` — include enough context for the user to decide
 - `header`: `"DD-N"` (max 12 chars)
-- `options`: label (1-5 words) + description (trade-off) + optional `preview` (code snippet)
+- `options`: label (1-5 words) + description (trade-off) + optional `preview` (code snippet). Lead with the option in `dd_resolution.recommended` (if any) and label it "(Recommended)". Never order by status quo.
 
-**Do NOT apply design decisions to the plan without explicit user confirmation.**
+If `Mode: shadow` is set in the rules file, every DD arrives as `ask`; when you record the answer also keep `shadow_rule` / `shadow_select` so Step 7 can log whether the rule would have matched.
+
+**Do NOT apply design decisions to the plan without explicit user confirmation, except `auto`-tier picks, which are applied unasked and surfaced in Step 8a.**
 
 ### Step 6: Apply User's Design Decisions via Subagent
 
 **IMPORTANT:** Launch a single subagent (`model: sonnet`) to handle all DD resolution work. The main orchestrator agent must NOT read/edit plan files or review files directly for DD application — this pollutes the main context window with large file contents. Instead, the subagent receives:
 - The plan file path and review file path
-- All user answers (DD number → chosen option text and any user notes)
+- All answers (DD number → chosen option text, any user notes, and how it was decided: `asked`, `accepted pre-filled: <rule>`, `auto-resolved: <rule>`, or `shadow: <rule> would pick <id>`)
 - Instructions to: (1) apply each chosen option to the plan, (2) update the `**Chosen:**` field in the review document, (3) if the user selected "Other" with custom text, apply that instead
 
 **Fragility-pattern sweep (required for every DD that resolves a class of fragility):** When a DD resolves a fragility pattern — a readiness race (flat sleep vs. poll loop), an unquoted variable, a missing error guard, a stale assertion — the DD-application subagent MUST scan the same file/code-block area for all other occurrences of that identical fragility before marking the DD resolved. If sibling occurrences exist, apply the same fix to all of them in the same step and list each sibling in the DD resolution summary. Never mark a DD complete if the same fragility remains in a sibling block of the same file.
@@ -277,7 +284,7 @@ The writer subagent prompt:
 >
 > **Applied mechanical fixes:** The following fixes were already applied to the plan before you ran: [list from Step 4 applied results]. Mark each corresponding item as `[x] _(applied)_` when writing the Mechanical Fixes checklist.
 >
-> **Resolved DDs:** The following DD choices were applied before you ran: [list from Step 6 summary]. Fill in the `**Chosen:**` field for each.
+> **Resolved DDs:** The following DD choices were applied before you ran: [list from Step 6 summary]. Fill in the `**Chosen:**` field for each. Start every `**Chosen:**` line with `Option <bare id>.` (e.g. `Option A. Lifted state to App.tsx`) and append the decision path in italics when it was not asked: `*(auto-resolved: R1)*`, `*(accepted pre-filled: R5a)*`, or, in shadow mode, `*(shadow: R1 would pick B)*`. A reverted auto-resolved DD records the user's final option plus `*(auto-resolved R1, reverted)*`.
 >
 > **Prior-fix check (Pass 2+ only):** The coordinator re-verified [N] prior fixes and found [M] regressions (from its return line; any regression is already a critical finding in `coordinator.md`). State this in the Summary prose.
 >
@@ -327,7 +334,8 @@ Present a concise summary using data from `coordinator-summary.md` and fix subag
 - Count of critical / major / minor findings
 - **Mechanical fixes applied** (count)
 - **Mechanical fixes skipped** (if any, with reasons)
-- **DD choices applied** (count)
+- **DD choices applied** (count) — split into asked / accepted pre-filled / auto-resolved
+- **Auto-resolved DDs (revert any?)** — one line each: `DD-N [Rn] <title> -> Option X: <label>`. The user can say "revert DD-N" to re-open it.
 - **Self-corrections** (count of `self_corrected: true` across Step 4 + Step 6 results, if any) — a nonzero count means a fix or DD would have drifted into next pass's findings without this pass's self-check catching it; worth a glance if the number is consistently high across plans, as it signals the self-check itself may need sharpening
 - Path to the review file
 - Apply the DD-rewrite churn guard from the Review Loop section.

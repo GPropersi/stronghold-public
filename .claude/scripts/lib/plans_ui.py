@@ -32,6 +32,7 @@ from urllib.parse import parse_qs, unquote
 import plan_backfill
 import plan_lifecycle
 import plan_parse
+import plan_pr_link
 
 SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 STATES = plan_parse.STATES
@@ -144,6 +145,24 @@ def _blurb(lines: list[str]) -> str | None:
     if len(out) > BLURB_MAX:
         cut = out.rfind(" ", 0, BLURB_MAX - 1)
         out = out[: cut if cut > 60 else BLURB_MAX - 1].rstrip(" ,;:") + "…"
+    return out
+
+
+PRS_MAX = 20
+
+
+def _prs(raw: str | None, done_raw: str | None = None) -> list[dict]:
+    """Pull-request links from the `pr_urls:` frontmatter value; anything not a GitHub PR URL is dropped.
+
+    `done` is True for a URL listed in `pr_done:` (merged or closed, written by plan-pr-sync.sh)."""
+    out: list[dict] = []
+    done = set((done_raw or "").strip("\"'").split())
+    for url in (raw or "").strip("\"'").split():
+        if plan_pr_link.PR_URL_RE.fullmatch(url) and all(item["url"] != url for item in out):
+            parts = url.split("/")
+            out.append({"url": url, "number": int(parts[-1]), "repo": f"{parts[3]}/{parts[4]}", "done": url in done})
+        if len(out) == PRS_MAX:
+            break
     return out
 
 
@@ -289,7 +308,8 @@ def _build(path: Path, root: Path, repo: str, state: str, topic: str, name: str)
         "kind": kind,
         "title": _title(lines, name),
         "short_title": (doc.frontmatter.get("short_title") or "").strip().strip("\"'") or None,
-        "about": (doc.frontmatter.get("short_summary") or "").strip().strip("\"'") or _blurb(lines),
+        "prs": _prs(doc.frontmatter.get("pr_urls"), doc.frontmatter.get("pr_done")),
+        "about":(doc.frontmatter.get("short_summary") or "").strip().strip("\"'") or _blurb(lines),
         "branch": doc.frontmatter.get("branch") or None,
         "issue": None if issue == "invalid" else issue,
         "issue_url": _safe_url(doc.github_issue_url),
