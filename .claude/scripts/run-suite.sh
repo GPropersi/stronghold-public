@@ -101,12 +101,23 @@ slug="$(basename "$dir" | tr -c 'A-Za-z0-9\n._-' '-')"
 out="$OUT_DIR/suite-$slug-$target-$(date +%s)-$$.txt"
 
 start="$(date +%s)"
-make -C "$dir" "$target" "$@" >"$out" 2>&1
+# test-* targets are the heavy ones: queue them host-wide (hostq.sh) so they wait for a slot instead of
+# piling onto a loaded host. RUN_SUITE_HOSTQ="" disables. Exit 75 = still queued when the wait ran out.
+queue=()
+hostq_bin="${RUN_SUITE_HOSTQ-$(dirname "${BASH_SOURCE[0]}")/hostq.sh}"
+case "$target" in
+  test-*)
+    if [ -n "$hostq_bin" ] && [ -x "$hostq_bin" ]; then
+      queue=("$hostq_bin" run --label "run-suite $slug $target" --weight 1 --)
+    fi
+    ;;
+esac
+${queue[@]+"${queue[@]}"} make -C "$dir" "$target" "$@" >"$out" 2>&1
 rc=$?
 secs=$(($(date +%s) - start))
 
 lines="$(wc -l <"$out" | tr -d ' ')"
-if [ "$rc" -eq 0 ]; then verdict="PASS"; else verdict="FAIL"; fi
+if [ "$rc" -eq 0 ]; then verdict="PASS"; elif [ "$rc" -eq 75 ]; then verdict="NOT RUN, still queued (not a failure)"; else verdict="FAIL"; fi
 
 echo "run-suite: make -C $dir $target $*"
 echo "result: $verdict (exit $rc) in ${secs}s"

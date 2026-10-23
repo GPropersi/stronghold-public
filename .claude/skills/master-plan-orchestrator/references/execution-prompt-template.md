@@ -57,7 +57,7 @@ place, as you reach it.>
 
 ### Step 0 — orient and set up memory
 
-- Set up the single branch `<branch-name>` and its worktree (per `~/code/CLAUDE.md` → Worktree
+- Set up the single branch `<branch-name>` and its worktree (per `~/code/.claude/worktree-discipline.md` → Worktree
   Discipline, part (1)). `<worktree-path>` is resolved at runtime, never substituted at generation
   time. Resolve porcelain-first:
   - Run `git -C ~/code/<repo> worktree list --porcelain` from `~/code` first (use bare `git` instead

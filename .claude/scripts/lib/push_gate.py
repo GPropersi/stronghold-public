@@ -399,6 +399,7 @@ def _run(mode: str, branch: str, report: dict) -> int:
         "base": base, "base_sha": base_sha, "checked_at": now_iso(),
         "stale": {"status": "CLEAN", "commits": [], "merged_pr": None},
         "scope": scope, "suites": [], "status": "running",
+        "hostq_job": os.environ.get("HOSTQ_JOB_ID") or None,
     }
     remove_old_results(gate_dir, branch, sha)
     if not scope["suites"]:
@@ -425,13 +426,38 @@ def tip_and_path(branch: str, cwd: str | None) -> tuple[str, Path | None]:
     return sha, Path(common) / "push-gate" / f"{sha}.json"
 
 
+def hostq_job_state(job: str) -> str:
+    base = Path(os.environ.get("HOSTQ_DIR") or Path.home() / ".local" / "state" / "hostq")
+    try:
+        return (base / "jobs" / job / "state").read_text().strip()
+    except OSError:
+        return ""
+
+
+def interrupted(data: dict) -> bool:
+    """A `running` result whose hostq job is gone (killed, lost, cancelled): it will never finish."""
+    job = data.get("hostq_job")
+    return (
+        data.get("status") == "running"
+        and isinstance(job, str)
+        and hostq_job_state(job) not in ("waiting", "running")
+    )
+
+
 def status(branch: str) -> int:
     sha, path = tip_and_path(branch, None)
     if path is None or not path.is_file():
         print("none")
         return 0
+    text = path.read_text()
     print(path)
-    print(path.read_text())
+    print(text)
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return 0
+    if isinstance(data, dict) and interrupted(data):
+        print(f"INTERRUPTED: hostq job {data['hostq_job']} is gone; rerun push-gate.sh {branch}")
     return 0
 
 
@@ -459,6 +485,8 @@ def check_reason(branch: str, cwd: str | None) -> str | None:
         return f"result for {sha[:7]} has mode {data.get('mode')!r} (expected full)"
     state = data.get("status")
     if state == "running":
+        if interrupted(data):
+            return f"gate interrupted (hostq job {data['hostq_job']} is gone) for {sha[:7]}: rerun push-gate.sh {branch}"
         return f"gate still running or was killed for {sha[:7]}: rerun push-gate.sh {branch}"
     if state not in ("pass", "na"):
         return f"gate status is {state!r} for {sha[:7]}: fix and rerun push-gate.sh {branch}"

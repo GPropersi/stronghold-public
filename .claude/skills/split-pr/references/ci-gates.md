@@ -408,7 +408,7 @@ gates the UI legs' existence.
    assets. Any tier-2 gate you still need must run **before** it, or `make up d=1` again after.
 5. **Capacity is finite and shared.** N+1 verification worktrees are N+1 stacks. Run
    `make -C ~/code wt-capacity REPO=app-main` before starting a suite (redirect, Read, delete) and
-   respect `agents_max` / `suites_ceiling` (`~/code/CLAUDE.md` → Worktree Discipline (4)). Re-read it
+   respect `agents_max` / `suites_ceiling` (`~/code/.claude/worktree-discipline.md` → Worktree Discipline (4)). Re-read it
    **between** parts, not once at the start: another session on the same host moves these numbers
    (observed mid-run: `suites_ceiling` 3 → 2 → 3). Between parts, `make -C <wt> down` the part you have
    finished — §5's "clean up nothing until the last part passes" governs *worktrees*, not *stacks*, and

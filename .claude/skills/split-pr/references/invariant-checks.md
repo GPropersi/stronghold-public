@@ -199,7 +199,7 @@ switched, or modified by this step.
 
 **Capacity.** Before creating them, run `make -C ~/code wt-capacity REPO=<repo-dir>` as its own Bash
 call, redirect it into `/tmp/claude/wt-capacity-<repo-dir>.txt`, Read that file, and delete it
-(`~/code/CLAUDE.md` → Worktree Discipline (4)). Read the N+1 worktrees against **`spokes_ceiling`**:
+(`~/code/.claude/worktree-discipline.md` → Worktree Discipline (4)). Read the N+1 worktrees against **`spokes_ceiling`**:
 creating them starts no stacks, so they are spokes. It is **Skill Step 4** that turns each one into a
 live stack, and *that* is what `suites_ceiling` / `agents_max` bound — so a split with more parts than
 `suites_ceiling` can still be *built* and union-proven here, and must then run Step 4's gates in
