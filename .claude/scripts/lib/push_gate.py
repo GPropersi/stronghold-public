@@ -10,8 +10,11 @@ HEAD-sha-keyed result file (stdlib only). Every verdict comes from git state, fi
 A row's `a && b` command is split into the independent suites `a` and `b`, and each distinct
 suite runs once even when several matched rows contain it (see split_command for what stays whole).
 
-Result file: <git-common-dir>/push-gate/<sha>.json (schema 1). Exit codes of `run`: 0 pass or na,
-1 a suite failed, 3 precondition (stale, dirty tracked files in full mode, detached or wrong HEAD,
+Result file: <git-common-dir>/push-gate/<sha>.json (schema 1), rewritten at every suite start, finish
+and interruption (per suite: started_at, exit, duration_s, state, log_path; each suite log carries a
+`gate:` start and end line). SIGTERM/SIGHUP stops the suite process, logs INTERRUPTED and sets status
+`interrupted` (never accepted by `check`). Exit codes of `run`: 0 pass or na, 1 a suite failed,
+128+signal interrupted, 3 precondition (stale, dirty tracked files in full mode, detached or wrong HEAD,
 default branch, unmatched path, empty changed set, Worktree policy denial), 4 could not run (no
 seam key, malformed rows, fetch failed, gh unavailable for a multi-commit branch, missing suite).
 Env: PG_GH (gh binary, default gh-bot.sh), PG_LOG_DIR (default /tmp/claude).
@@ -24,8 +27,10 @@ import json
 import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 LIB_DIR = Path(__file__).resolve().parent
@@ -293,27 +298,90 @@ def summary_line(log_path: str) -> str:
     return lines[-1] if lines else ""
 
 
-def run_suites(scope_suites: list[dict], toplevel: str, repo: str, sha: str) -> list[dict]:
+class Interrupted(Exception):
+    """The gate process itself was told to stop (SIGTERM/SIGHUP) while a suite was running."""
+
+    def __init__(self, signum: int):
+        super().__init__(signal.Signals(signum).name)
+        self.signum = signum
+
+
+def _raise_interrupted(signum: int, _frame) -> None:
+    raise Interrupted(signum)
+
+
+def _stop_child(proc: subprocess.Popen | None) -> int:
+    """Stop the suite process the gate started and return its exit code (never leave it orphaned)."""
+    if proc is None:
+        return 128
+    proc.terminate()
+    try:
+        return proc.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        return proc.wait()
+
+
+def _log_note(log, message: str) -> None:
+    log.write(f"\ngate: {now_iso()} {message}\n".encode())
+    log.flush()
+
+
+def run_suites(
+    scope_suites: list[dict], toplevel: str, repo: str, sha: str,
+    done: list[dict] | None = None, persist=None,
+) -> list[dict]:
+    """Run the suites in order, appending one entry per suite to `done` and calling `persist()` at
+    every transition (started, finished, interrupted), so the result file and each suite log carry
+    the verdict even when this process is killed mid-suite. The suite's own log gets a start and an
+    end line with the exit code and duration."""
     log_dir = Path(os.environ.get("PG_LOG_DIR") or "/tmp/claude")
     log_dir.mkdir(parents=True, exist_ok=True)
-    done: list[dict] = []
-    for index, suite in enumerate(scope_suites, start=1):
-        log_path = str(log_dir / f"gate-{repo}-{sha[:7]}-{index}.txt")
-        with open(log_path, "wb") as log:
-            try:
-                proc = subprocess.run(
-                    ["bash", "-c", suite["command"]], cwd=toplevel, stdin=subprocess.DEVNULL,
-                    stdout=log, stderr=subprocess.STDOUT,
-                )
-                code = proc.returncode
-            except OSError as err:
-                raise Stop(4, f"could not run suite {suite['command']!r}: {err}")
-        if code in (126, 127):
-            raise Stop(4, f"suite command not found or not executable (exit {code}): {suite['command']!r}")
-        done.append({"command": suite["command"], "exit": code,
-                     "summary_line": summary_line(log_path), "log_path": log_path})
-        if code != 0:
-            break
+    done = [] if done is None else done
+    persist = persist or (lambda: None)
+    previous = {sig: signal.signal(sig, _raise_interrupted) for sig in (signal.SIGTERM, signal.SIGHUP)}
+    try:
+        for index, suite in enumerate(scope_suites, start=1):
+            log_path = str(log_dir / f"gate-{repo}-{sha[:7]}-{index}.txt")
+            entry = {"command": suite["command"], "exit": None, "state": "running",
+                     "started_at": now_iso(), "log_path": log_path}
+            done.append(entry)
+            persist()
+            started = time.monotonic()
+            proc = None
+            code = None
+            with open(log_path, "wb") as log:
+                _log_note(log, f"start {suite['command']!r}")
+                try:
+                    proc = subprocess.Popen(
+                        ["bash", "-c", suite["command"]], cwd=toplevel, stdin=subprocess.DEVNULL,
+                        stdout=log, stderr=subprocess.STDOUT,
+                    )
+                    code = proc.wait()
+                    entry["state"] = "done"
+                except Interrupted as stop:
+                    code = _stop_child(proc)
+                    entry["state"] = "interrupted"
+                    entry["interrupted_by"] = str(stop)
+                    _log_note(log, f"INTERRUPTED by {stop} after {time.monotonic() - started:.0f}s; "
+                                   f"suite process stopped with exit {code}")
+                    raise
+                except OSError as err:
+                    entry["state"] = "error"
+                    raise Stop(4, f"could not run suite {suite['command']!r}: {err}")
+                finally:
+                    entry["exit"] = code
+                    entry["duration_s"] = round(time.monotonic() - started)
+                    entry["summary_line"] = summary_line(log_path)
+                    persist()
+                _log_note(log, f"end exit={code} duration={entry['duration_s']}s")
+            if code in (126, 127):
+                raise Stop(4, f"suite command not found or not executable (exit {code}): {suite['command']!r}")
+            if code != 0:
+                break
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
     return done
 
 
@@ -409,9 +477,14 @@ def _run(mode: str, branch: str, report: dict) -> int:
         return 0
     write_atomic(result_path, result)
     try:
-        result["suites"] = run_suites(scope["suites"], toplevel, repo, sha)
-    except Stop:
-        raise
+        run_suites(scope["suites"], toplevel, repo, sha, done=result["suites"],
+                   persist=lambda: write_atomic(result_path, result))
+    except Interrupted as stop:
+        result["status"] = "interrupted"
+        result["interrupted_by"] = str(stop)
+        write_atomic(result_path, result)
+        print(json.dumps(result))
+        return 128 + stop.signum
     result["status"] = "pass" if all(s["exit"] == 0 for s in result["suites"]) else "fail"
     write_atomic(result_path, result)
     print(json.dumps(result))

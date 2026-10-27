@@ -5,6 +5,9 @@ Subcommands (via host-status.sh / stack-reap.sh):
   status [--json]                     one row per compose project: containers, worktree, branch, idle time
   reap [--min-idle-hours H] [--dry-run]
                                       stop (never remove) the containers of idle worktree stacks
+  stop <dir> [--reason R] [--dry-run] stop the running containers of every compose project whose working_dir
+                                      is inside the worktree that <dir> belongs to (hostq calls this when a
+                                      job is lost or cancelled: docker work outlives the job's process tree)
 
 Idle time of a stack = now - the newest of these signals for its worktree:
   - mtime of every modified/untracked file (git status) and of the git index (stage/commit activity)
@@ -256,6 +259,42 @@ def cmd_reap(args):
     return 1 if failures else 0
 
 
+def worktree_root(path):
+    """The worktree directory containing path (…/.claude/worktrees/<slug>), or None when it is not in one."""
+    head, marker, rest = path.rstrip("/").partition(WORKTREE_MARKER.rstrip("/") + "/")
+    slug = rest.split("/", 1)[0]
+    return f"{head}{WORKTREE_MARKER}{slug}" if marker and slug else None
+
+
+def cmd_stop(args):
+    """Stop the running containers of the worktree stacks under args.dir. Never touches hubs or primary clones."""
+    root = worktree_root(os.path.abspath(args.dir))
+    base = f"reason={args.reason} dir={args.dir}"
+    if root is None:
+        log(f"stop-skip {base} why=not-in-a-worktree")
+        return 0
+    ids, projects = [], set()
+    for row in list_containers():
+        wd = row["wd"]
+        if row["state"] == "running" and (wd == root or wd.startswith(root + "/")):
+            ids.append(row["id"])
+            projects.add(row["project"])
+    if not ids:
+        log(f"stop-skip {base} worktree={root} why=nothing-running")
+        return 0
+    if args.dry_run:
+        log(f"would-stop {base} worktree={root} projects={sorted(projects)} containers={len(ids)}")
+        return 0
+    started = time.time()
+    res = run([DOCKER, "stop", *ids], timeout=DOCKER_TIMEOUT)
+    err = res.stderr.strip().replace("\n", " | ")[:300]
+    log(
+        f"stopped {base} worktree={root} projects={sorted(projects)} containers={len(ids)} "
+        f"rc={res.returncode} duration={time.time() - started:.1f}s" + (f" err={err}" if res.returncode else "")
+    )
+    return 1 if res.returncode else 0
+
+
 def main():
     global ARGS
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -267,8 +306,12 @@ def main():
         "--min-idle-hours", default=os.environ.get("STACK_REAP_MIN_IDLE_HOURS", "6")
     )
     p_reap.add_argument("--dry-run", action="store_true")
+    p_stop = sub.add_parser("stop")
+    p_stop.add_argument("dir")
+    p_stop.add_argument("--reason", default="manual")
+    p_stop.add_argument("--dry-run", action="store_true")
     ARGS = parser.parse_args()
-    return {"status": cmd_status, "reap": cmd_reap}[ARGS.cmd](ARGS)
+    return {"status": cmd_status, "reap": cmd_reap, "stop": cmd_stop}[ARGS.cmd](ARGS)
 
 
 if __name__ == "__main__":

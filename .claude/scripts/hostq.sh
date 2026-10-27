@@ -30,7 +30,13 @@
 #   * Every state change is one JSONL line in $HOSTQ_DIR/events.jsonl: UTC `ts` + integer `epoch`
 #     (same instant, always both) plus load1 and cpu/mem PSI at that moment.
 #   * Limits: the unit cgroup covers host-side processes. Work a job hands to Docker (`docker exec`
-#     workers) lives in Docker's cgroup, so cancelling a job does not stop those.
+#     workers) lives in Docker's cgroup, so stopping a job does not stop those. Therefore a job that is
+#     cancelled, lost, or killed by a signal (rc >= 128) for a cwd inside a `.claude/worktrees/<slug>`
+#     also gets that worktree's compose stack `docker stop`ped (lib/host_stacks.py stop; logged to
+#     reap.log; HOSTQ_NO_STACK_STOP=1 disables). Containers are stopped, never removed.
+#   * Attribution: a `cancel` event records the caller's process ancestry; a `signalled` event records
+#     the signal, the unit cgroup's oom_kill count and the load/PSI at that moment (a handler cannot read
+#     the sender pid, so "who sent it" is answered by cancel-vs-oom-vs-neither plus the ancestry).
 #
 # Env: HOSTQ_DIR (state, default ~/.local/state/hostq) · HOSTQ_SLOTS (2) · HOSTQ_CPU_PSI_MAX (50)
 #      HOSTQ_MEM_PSI_MAX (5) · HOSTQ_MAX_WAIT (3600) · HOSTQ_ANNOUNCE (30) · HOSTQ_POLL (2)
@@ -176,6 +182,30 @@ event() { # name id [key=value ...]  -> one JSONL line, flock-safe append
   printf '{%s}\n' "$fields" >>"$EVENTS"
 }
 
+ancestry() { # pid -> "pid:comm <- pid:comm ..." up to 8 levels, for attribution in events
+  local pid=$1 out="" n=0 comm stat
+  while [ -n "$pid" ] && [ "$pid" -gt 1 ] && [ "$n" -lt 8 ]; do
+    comm="$(tr -d '\n' <"/proc/$pid/comm" 2>/dev/null)" || break
+    out+="${out:+ <- }$pid:$comm"
+    stat="$(cat "/proc/$pid/stat" 2>/dev/null)" || break
+    stat="${stat##*) }"
+    pid="$(awk '{print $2}' <<<"$stat")"
+    n=$((n + 1))
+  done
+  printf '%s' "$out"
+}
+
+# Docker work outlives a job's process tree: stop the compose stack of the worktree the job ran in.
+# Detached and time-boxed because callers may hold the queue lock.
+stop_stacks() { # id reason
+  local id=$1 reason=$2 cwd helper
+  [ "${HOSTQ_NO_STACK_STOP:-0}" = 1 ] && return 0
+  cwd="$(jget "$id" cwd)"
+  helper="$(dirname "$SELF")/lib/host_stacks.py"
+  { [ -n "$cwd" ] && [ -r "$helper" ]; } || return 0
+  setsid timeout 150 python3 "$helper" stop "$cwd" --reason "$reason:$id" >/dev/null 2>&1 </dev/null &
+}
+
 # ---- admission (call with the lock held) -----------------------------------------------------
 mark_lost() {
   local id=$1
@@ -183,6 +213,7 @@ mark_lost() {
   jset "$id" end "$(now)"
   [ -e "$JOBS/$id/rc" ] || jset "$id" rc 70
   event lost "$id" "label=$(jget "$id" label)" "was=worker-gone"
+  stop_stacks "$id" lost
 }
 
 REASON=""
@@ -328,6 +359,14 @@ cmd_worker() {
   jset "$id" rc "$rc"
   [ "$(jget "$id" state)" = cancelled ] || jset "$id" state "done"
   event end "$id" "label=$label" "rc=$rc" "duration=$dur" "waited=$((start - enq))"
+  if [ "$rc" -ge 128 ] && [ "$rc" -le 192 ]; then
+    local cg oom=unknown
+    cg="/sys/fs/cgroup$(cut -d: -f3- /proc/self/cgroup 2>/dev/null)/memory.events"
+    [ -r "$cg" ] && oom="$(awk '$1=="oom_kill"{print $2}' "$cg")"
+    event signalled "$id" "label=$label" "rc=$rc" "signal=$(kill -l $((rc - 128)) 2>/dev/null || echo '?')" \
+      "unit_oom_kill=$oom" "state=$(jget "$id" state)"
+    stop_stacks "$id" "signalled-rc$rc"
+  fi
   flock -u 9
   echo "hostq: END '$label' rc=$rc duration $(human_dur "$dur")"
   exit "$rc"
@@ -538,7 +577,8 @@ cmd_cancel() {
     jset "$id" state cancelled
     jset "$id" end "$(now)"
     jset "$id" rc 130
-    event cancel "$id" "label=$(jget "$id" label)" "was=$st" ) 9>>"$LOCK"
+    event cancel "$id" "label=$(jget "$id" label)" "was=$st" "caller=$(ancestry "$$")" ) 9>>"$LOCK"
+  stop_stacks "$id" cancel
   if [ "$(jget "$id" mode)" = unit ]; then
     systemctl --user stop "$(unit_name "$id").service" >/dev/null 2>&1 || true
   elif [ -n "$pid" ]; then
