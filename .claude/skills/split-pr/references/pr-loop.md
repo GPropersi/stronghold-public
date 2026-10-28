@@ -316,7 +316,10 @@ successfully; `--json bucket,name,state` buckets each check as `pass`/`fail`/`pe
   `Bash(GH_TOKEN_GENERATOR=*gh-log-fetch.sh*)` entry allowlists.
 - **A red part is not a reason to improvise.** Investigate per `~/code/CLAUDE.md` → "Test Failures:
   Investigate, Don't Dismiss". A failure that is genuinely a slicing defect goes **back to the user**
-  and back through Skill Step 2's acceptance — never silently re-assign files between parts.
+  and back through Skill Step 2's acceptance — never silently re-assign files between parts. A failure
+  traced to a **flaky pre-existing test** is not a slicing defect: log it in `<plan-dir>/split/flakes.md`,
+  rerun the gate or CI once on the same SHA, never edit the test inside the part, and fix it in the final
+  hardening part (Skill Step 5j).
 
 ---
 

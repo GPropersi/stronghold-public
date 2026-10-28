@@ -59,7 +59,10 @@ tag) so SKILL.md itself stays repo-agnostic.
 - **Stop rule 1 — a local failure stops the run.** Report the part, the target, the failing test and
   the excerpt from the redirect file. Then investigate it properly (`~/code/CLAUDE.md` → Test
   Failures: Investigate, Don't Dismiss). A partial tree's failure is *information about the slice*,
-  almost never a flake.
+  almost never a flake. **If the investigation does prove a flaky pre-existing test** (passes in
+  isolation, artifacts show no product error, the part does not touch the code under test), it is not
+  a slicing defect: log it in `<plan-dir>/split/flakes.md` and carry on; the final hardening part
+  (Skill Step 5j) fixes it. Never edit the test inside a part.
 - **Stop rule 2 — never re-slice silently to make a gate pass.** Moving a file from one part to
   another changes the manifest **the user accepted** in Skill Step 2, invalidates the partition proof
   in `invariant-checks.md` §1, and changes what each PR will claim to contain. A gate failure that

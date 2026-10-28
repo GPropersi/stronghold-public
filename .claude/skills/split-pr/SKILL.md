@@ -402,7 +402,13 @@ correcting **seven** assumptions inherited here.
 - **4c.** **One built/full-stack run per part is non-negotiable** — the cheap gates **lie** wherever the
   repo's test setup mocks the seam the split cuts. §2-§3, §6b, §6d.
 - **4d.** **A local failure STOPS the run.** Never re-assign files between parts to make a gate pass:
-  that changes the manifest the user accepted. §0.
+  that changes the manifest the user accepted. §0. **Exception: a flaky pre-existing test.** Investigate
+  per `~/code/CLAUDE.md` → "Test Failures" (read the failure artifacts, isolated reruns, same-SHA
+  rerun). If the evidence says the failing test is flaky and not a slicing defect, do **not** edit it
+  inside a part (that changes the reviewed tree and breaks the union invariant): append it to
+  `<plan-dir>/split/flakes.md` (Write tool; test id, which part/run, symptom, evidence, suspected race)
+  and continue. Every logged flake is fixed by the **hardening part** (Step 5j). Never dismiss one as
+  "will be handled later" without the log entry.
 - **4e.** Write **`built-and-verified`** to the manifest `status` column **per part, here and only here**,
   after that part's built run — Skill Step 3 wrote nothing. Skill Step 1b's resume reads it. §4.
 - **4f.** Only then clean up: every verification worktree **and its live stack**, its throwaway branch,
@@ -467,10 +473,22 @@ does not persist in a subagent.
   duplicates the gate hard-blocks, and a PR based on a part branch runs zero checks. §8.
 - **5i. Sync after every part**, once that merge is confirmed: 1g's five-call sequence, same
   stop-and-report rule when neither a changed SHA nor an explicit "nothing to commit" holds. §9.
+- **5j. Hardening part (HP) — the final PR, whenever `<plan-dir>/split/flakes.md` is non-empty.** A
+  flake found by any gate or CI run of any part (see 4d) is fixed here, never left for "a follow-up".
+  Once the last original part is merged and confirmed, add an `HP` row to the manifest (`status:
+  planned`, `plan-steps: none (flake hardening)`, branch `split/<topic>-hp-flake-hardening`), cut it
+  fresh from the updated `origin/<default-branch>` (5a), and have one subagent fix every logged flake at
+  its root cause (explicit readiness wait or deterministic interaction; a timeout bump only when
+  profiling shows the real worst case exceeds the default), then repeat the failing test in isolation
+  and gate the part (5c) like any other. It gets its **own issue** (5e's unrelated-changes rule, never
+  `Closes` the original) and its body lists each flake, the evidence and the fix. Each part's PR body
+  already notes the flake it hit, pointing at HP. The split is not finished until HP is merged; Step 6
+  runs after it. If a flake's fix is not obvious or large, ask the user via `AskUserQuestion` rather than
+  dropping it.
 
 ### 6. Disposition, and the downstream skills that assume one PR
 
-Runs only once **every** part shows `merged` in the manifest, programmatically confirmed (5h). **Read
+Runs only once **every** part (including the hardening part HP when 5j applies) shows `merged` in the manifest, programmatically confirmed (5h). **Read
 `references/disposition.md` first** — every exact command, the irreversibility gates, and a ledger
 correcting **seven** assumptions inherited here. **Orchestrator-only, like Steps 3 and 5:** every call
 resolves its target from the Bash cwd, which does **not** persist in a subagent; else **STOP and report**.
@@ -485,7 +503,10 @@ resolves its target from the Bash cwd, which does **not** persist in a subagent;
   worktree (`make wt-rm`) or git refuses; `git branch -D` (`-d` fails "not fully merged"), then
   `gh-bot.sh api -X DELETE repos/<Repo slug>/git/refs/heads/<branch>` — never `git push --delete`. §2.
 - **6c. Record, never rewrite.** Leave the plan's checkboxes and `branch:` alone; add `split_into:` below
-  the `github_issue*` keys, close out the manifest, then **sync** via 1g's five-call sequence. §3-§4.
+  the `github_issue*` keys, close out the manifest, then **update the master plan** if the plan is a
+  phase of one (disposition §3: set that phase's `**Status:**` to `merged` with every part PR incl. HP and
+  the final merge date + sha; also fix a stale `**Status:**` on an earlier phase this one `Depends on` only
+  if its merge is verifiable), then **sync** via 1g's five-call sequence. §3-§4.
 - **6d. Warn about the one-PR assumptions** when handing back: parts go strictly **one at a time** (one
   fixed-name topic `tmp/`, shared and wiped); `/pr-review` usually lands on a picker where **"Skip plan
   conformance"** is right, and flags every step missed if a plan *is* resolved; `/git-push`'s

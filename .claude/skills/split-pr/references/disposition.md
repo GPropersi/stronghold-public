@@ -265,6 +265,16 @@ Safe to add: nothing validates the plan frontmatter key set. `plan-list.sh` read
 keys. Keep `split_into:` **below** those keys so it never pushes `github_issue:` or `branch:` out of
 `git-push`'s first-20-lines window.
 
+**Master plan.** If the split plan is a phase of a master plan (its path or `Master plan:` line links one,
+or a master phase has `**Sub-plan:**` pointing at it — `grep -l '<plan-name>' <repo>/open/*/*-master.md`),
+edit that phase's `**Status:**` line in the master to the repo's existing merged form, e.g.
+`**Status:** merged — PRs #902, #905, #907, #908 (split from <branch>), plus hardening PR #912 (YYYY-MM-DD, <sha>)`
+(list every part PR, HP included; date and sha from the last part's `pr-state.sh` merge line). Only
+that phase's status line — do not tick or rewrite its to-dos or other phases. If a prerequisite phase's
+status is visibly stale (`awaiting merge` though its sub-plan is in `completed/`), fix it only when its PR
+numbers are verifiable (`plan-pr-link.sh`, the sub-plan frontmatter or `gh pr view`); otherwise report it
+in the hand-off. Not a master phase → skip. The master edit rides the same §4 sync.
+
 **Leave `branch:` pointing at the original branch** even though §2d just deleted it. It is the
 historical fact the plan records, and the manifest is where the live part branches live. See §5c for
 what that means the next time someone runs `/git-push` against a part.
