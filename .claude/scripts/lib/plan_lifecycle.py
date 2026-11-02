@@ -30,6 +30,10 @@ Commands (<repo> is a sub-repo DIRECTORY name or `stronghold`, mapped to a bucke
                                         pushed) is merged only when EVERY part PR is, and gets `merged — PRs #A–#B (date, sha)`.
                                         Never unticks; `(manual, post-merge)` is never touched.
                                         Exit 1 when a named topic matches no master step.
+  next <repo> [<topic>]                 for each OPEN master plan, name the steps that can start now (every **Depends on:** step is
+                                        `merged`; a no-PR bucket also accepts `done`) and the command for each: `/plan-creator`
+                                        when the step has no sub-plan, `/run-plan` when it has an unfinished one, `/git-push` when
+                                        its sub-plan is finished but unmerged. `reconcile --merged` prints the same block last.
   backfill [--dry-run] [--only <rule>] [--force]
                                         idempotent migration of every plan in the store to the plan schema (rules a-g, see
                                         plan_backfill.py); skips dirty/untracked plan files unless --force; prints a per-rule summary.
@@ -65,6 +69,7 @@ import wf_lint_base as base  # noqa: E402
 
 STATES = ("open", "completed")
 NUMBER_RE = re.compile(r"^[0-9]+$")
+DEPENDS_RE = re.compile(r"^\*\*Depends on:\*\*\s*(.*)$")
 SLUG_RE = re.compile(r"[:/]([^/:]+/[^/]+?)(?:\.git)?/?$")
 ISSUE_URL_RE = re.compile(r"github\.com/([^/\s]+/[^/\s]+)/(?:issues|pull)/[0-9]+")
 GH_TIMEOUT = 90
@@ -681,6 +686,75 @@ class Reconciler:
             path.write_text("\n".join(self._sub_lines[path]) + ("\n" if original.endswith("\n") else ""), encoding="utf-8")
 
 
+def step_depends(lines: list[str], step: plan_parse.Step) -> list[int]:
+    for text in lines[step.start - 1 : step.end]:
+        found = DEPENDS_RE.match(text)
+        if found:
+            value = found.group(1)
+            return [] if value.strip("`*_ ").lower().startswith("none") else [int(n) for n in re.findall(r"\d+", value)]
+    return []
+
+
+def step_settled(step: plan_parse.Step, no_pr: bool) -> bool:
+    status = (step.status or "").lower()
+    if status.startswith("merged") or (no_pr and status.startswith("done")):
+        return True
+    return status.startswith("done") and "merged" in status and "awaiting" not in status
+
+
+def next_actions(store: Store, bucket: str, repo: str, topic_name: str | None) -> list[str]:
+    """Lines naming the master steps that can start now (all Depends-on steps settled) and the command for each."""
+    no_pr = bucket in store.ctx.cfg["fixed_buckets"].values()
+    out: list[str] = []
+    for topic in store.topics(bucket, "open"):
+        if topic_name and topic.name != topic_name:
+            continue
+        for master in store.plan_files(topic):
+            doc = plan_parse.parse_plan(master)
+            if doc.effective_type == "orchestrator" or doc.legacy:
+                continue
+            if not (doc.type == "master" or (doc.type is None and "master" in master.stem.lower())):
+                continue
+            lines = master.read_text(encoding="utf-8").splitlines()
+            settled = {s.n for s in doc.steps if step_settled(s, no_pr)}
+            pending = [s for s in doc.steps if s.n not in settled and (s.branch or s.sub_plan_link)]
+            if not pending:
+                out.append(f"NEXT [{master.stem}]: every step is merged; complete the master with plan-lifecycle.sh complete")
+                continue
+            ready = [s for s in pending if all(d in settled for d in step_depends(lines, s))]
+            if not ready:
+                blocked = ", ".join(f"step {s.n} ({s.status or 'no status'})" for s in pending)
+                out.append(f"NEXT [{master.stem}]: nothing can start yet; waiting on {blocked}")
+                continue
+            out.append(f"NEXT [{master.stem}]: {len(ready)} step(s) can start now")
+            for step in ready:
+                out.append(f"  step {step.n} {step.title} (branch {step.branch or 'none'}, status {step.status or 'todo'})")
+                out.extend(f"    {line}" for line in step_command(store, master, step, repo))
+    return out
+
+
+def step_command(store: Store, master: Path, step: plan_parse.Step, repo: str) -> list[str]:
+    link = step.sub_plan_link
+    if (not link or link == "none") and (step.status or "").lower().startswith("done"):
+        return ["done and awaiting merge; nothing to start"]
+    if not link or link == "none":
+        return [f"/plan-creator step {step.n} of {master.stem} (repo {repo})"]
+    found = plan_parse.resolve_link(master, link)
+    if found.path is None or not found.path.is_file():
+        return [f"sub-plan link `{link}` does not resolve; fix it in {master.name}"]
+    sub = plan_parse.parse_plan(found.path)
+    if sub.finished is True:
+        return [f"sub-plan finished but not merged; push it: /git-push {repo}:{sub.frontmatter.get('branch') or step.branch}"]
+    return [f"/run-plan {repo}/{found.path.stem}"]
+
+
+def cmd_next(store: Store, args: argparse.Namespace) -> int:
+    bucket = store.bucket_for(args.repo)
+    lines = next_actions(store, bucket, args.repo, args.topic)
+    print("\n".join(lines) if lines else f"NEXT: no open master plan in {args.repo}")
+    return OK
+
+
 def cmd_reconcile(store: Store, args: argparse.Namespace) -> int:
     bucket = store.bucket_for(args.repo)
     rec = Reconciler(store, bucket, args.merged, args.dry_run)
@@ -691,6 +765,10 @@ def cmd_reconcile(store: Store, args: argparse.Namespace) -> int:
             for plan in store.plan_files(topic):
                 rec.reconcile_master(plan)
     rec.flush()
+    if args.merged and not args.dry_run and rec.lookups_ok:
+        lines = next_actions(store, bucket, args.repo, args.topic)
+        if lines:
+            print("\n".join(lines))
     if args.topic and rec.matched == 0:
         print(f"note     no master step found for topic `{args.topic}`", file=sys.stderr)
         return DRIFT
@@ -727,6 +805,9 @@ def build_parser() -> argparse.ArgumentParser:
     reconcile.add_argument("topic", nargs="?")
     reconcile.add_argument("--merged", action="store_true")
     reconcile.add_argument("--dry-run", action="store_true")
+    nxt = sub.add_parser("next")
+    nxt.add_argument("repo")
+    nxt.add_argument("topic", nargs="?")
     backfill = sub.add_parser("backfill")
     backfill.add_argument("--dry-run", action="store_true")
     backfill.add_argument("--only", choices=plan_backfill.RULES)
@@ -743,6 +824,7 @@ COMMANDS = {
     "audit": cmd_audit,
     "sweep": cmd_sweep,
     "reconcile": cmd_reconcile,
+    "next": cmd_next,
     "backfill": cmd_backfill,
     "review-topic": cmd_review_topic,
 }

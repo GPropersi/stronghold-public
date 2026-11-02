@@ -138,6 +138,10 @@ For each repo cleaned in 5b, run `~/code/.claude/scripts/plan-lifecycle.sh recon
 
 Run `~/code/.claude/scripts/plan-pr-sync.sh` once (not per repo) as its own standalone Bash call. It writes `pr_done:` frontmatter for linked PRs that merged or closed, so the plans dashboard stops showing those plans as in review. Non-fatal like 5b/5c. When it printed `N plan(s) updated` with N above 0, finish with `.claude/scripts/stronghold-sync.sh "plans: record merged PRs"` as its own call.
 
+### 5e. Next master-plan step
+
+For each repo cleaned in 5b, run `~/code/.claude/scripts/plan-lifecycle.sh next <repo-dir>` as its own standalone Bash call (read-only; `make plan-next REPO=<repo-dir>` is the same). It names every open master step whose `Depends on:` steps are all merged, with the command to run (`/plan-creator`, `/run-plan` or `/git-push`). Only the `NEXT` lines for the master the merged PR belonged to are needed; skip the others unless the user asked. Non-fatal: note a failure and continue.
+
 ### 6. Report
 
 One-line summary:
@@ -145,7 +149,7 @@ One-line summary:
 - `Deleted N branches: foo, bar, baz. Kept M: qux.`
 - Or `No branches deleted.` if the user checked nothing.
 
-Also include, when they apply: `Closed issues: #N, #M` (from Step 5b), `Removed N merged worktrees: <paths>` (removed via `wt.sh rm`, plus any removal that failed with its refusal text), and — when run from a linked worktree — "primary's `main` was not pulled (ran from a worktree)".
+Always end with the Step 5e `NEXT` command(s), copy-pasteable, one block per command. Also include, when they apply: `Closed issues: #N, #M` (from Step 5b), `Removed N merged worktrees: <paths>` (removed via `wt.sh rm`, plus any removal that failed with its refusal text), and — when run from a linked worktree — "primary's `main` was not pulled (ran from a worktree)".
 
 ## Notes
 
