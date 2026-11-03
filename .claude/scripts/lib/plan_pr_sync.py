@@ -3,11 +3,14 @@
 completed plans whose PRs are still in review.
 
 Usage: plan_pr_sync.py [--dry-run] [<plans-dir>]
+       plan_pr_sync.py --mark <pr-url> <MERGED|CLOSED> [<plans-dir>]
 
 For every plan whose `pr_urls:` frontmatter holds a PR not yet in `pr_done:`, ask GitHub for the PR state
 (through gh-bot.sh, run inside the sub-repo checkout whose origin matches the PR's owner/repo) and add MERGED
 or CLOSED PRs to the `pr_done:` frontmatter key (space-separated). Idempotent. A PR whose state cannot be
 read (no matching checkout, gh failure, timeout) is logged to stderr and left as in review.
+--mark records one PR whose state the caller already read (pr-state.sh, on a MERGED/CLOSED verdict) in every
+plan listing it, with no GitHub call.
 Exit: 0 ok | 2 usage.
 """
 
@@ -94,8 +97,8 @@ def write_done(path: Path, lines: list[str], done: list[str]) -> None:
         raise
 
 
-def sync(plans_dir: Path, dry_run: bool) -> int:
-    repos = checkouts()
+def sync(plans_dir: Path, dry_run: bool, mark: tuple[str, str] | None = None) -> int:
+    repos = {} if mark else checkouts()
     seen: dict[str, str | None] = {}
     changed = 0
     for path in sorted(plans_dir.glob("*/*/*/*.md")):
@@ -110,6 +113,10 @@ def sync(plans_dir: Path, dry_run: bool) -> int:
         new = list(done)
         for url in urls:
             if url in done or not plan_pr_link.PR_URL_RE.fullmatch(url):
+                continue
+            if mark:
+                if url == mark[0] and mark[1] in STATES_DONE:
+                    new.append(url)
                 continue
             slug = "/".join(url.split("/")[3:5])
             cwd = repos.get(slug)
@@ -132,13 +139,19 @@ def sync(plans_dir: Path, dry_run: bool) -> int:
 
 def main(argv: list[str]) -> int:
     args = argv[1:]
+    mark = None
+    if args[:1] == ["--mark"]:
+        if len(args) < 3:
+            print(__doc__, file=sys.stderr)
+            return 2
+        mark, args = (args[1], args[2]), args[3:]
     dry_run = "--dry-run" in args
     args = [a for a in args if a != "--dry-run"]
     if len(args) > 1:
         print(__doc__, file=sys.stderr)
         return 2
     plans_dir = Path(args[0]) if args else STRONGHOLD / "plans"
-    return sync(plans_dir, dry_run)
+    return sync(plans_dir, dry_run, mark)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,11 @@ Verdicts: MERGED | CLOSED | OPEN-CI-FAILED | OPEN-CI-RUNNING | OPEN-BLOCKED | OP
 A merged PR with a failing check still prints MERGED, then a `LATE-FAILURE:` line per failing check (a run that
 finished after the merge, or a rerun): investigate those, they are not a merge blocker.
 
-Env: PR_STATE_GH  gh wrapper to run (default gh-bot.sh beside this script's parent); it runs with the repo
+A MERGED or CLOSED verdict also records the PR in every plan that links it (`pr_done:` frontmatter, via
+plan_pr_sync.py --mark), so the plans dashboard stops showing it as in review; this never changes the verdict or exit
+code, and a failure is logged to stderr. Publish the plan edit with stronghold-sync.sh.
+
+Env: PR_STATE_GH gh wrapper to run (default gh-bot.sh beside this script's parent); it runs with the repo
                   directory as cwd because the bot installation is picked from the cwd's origin.
 Exit: 0 merged | 1 closed unmerged | 3 open, CI failed | 5 still open at --wait timeout (or open without --wait,
       CI not failed) | 2 usage | 4 unavailable (no slug, gh failed)
@@ -35,6 +39,7 @@ sys.path.insert(0, str(LIB_DIR))
 import wf_lint_base as base  # noqa: E402
 
 GH_TIMEOUT = 90
+SYNC_TIMEOUT = 60
 FIELDS = "state,mergedAt,mergeCommit,mergeStateStatus,autoMergeRequest,headRefOid,statusCheckRollup,url"
 MERGED_EXIT, CLOSED_EXIT, FAILED_EXIT, USAGE_EXIT, UNAVAILABLE_EXIT, PENDING_EXIT = 0, 1, 3, 2, 4, 5
 BAD_CONCLUSIONS = {"FAILURE", "TIMED_OUT", "CANCELLED", "STARTUP_FAILURE", "ACTION_REQUIRED", "ERROR"}
@@ -114,6 +119,25 @@ def summarize(pr: dict) -> tuple[str, list[str], int]:
     return verdict, lines, code
 
 
+def record_done(root: Path, url: str, state: str) -> None:
+    """Mark the PR done in the stronghold plans; fail open (a bookkeeping error must not hide the verdict)."""
+    start = time.monotonic()
+    env = {**os.environ, "STRONGHOLD_DIR": str(root)}
+    try:
+        out = subprocess.run(
+            [sys.executable, str(LIB_DIR / "plan_pr_sync.py"), "--mark", url, state, str(root / "plans")],
+            env=env, text=True, capture_output=True, check=False, timeout=SYNC_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"pr-state: plan sync for {url} failed: {exc}", file=sys.stderr)
+        return
+    took = time.monotonic() - start
+    if out.returncode != 0:
+        print(f"pr-state: plan sync for {url} rc={out.returncode} in {took:.1f}s: {out.stderr.strip()}", file=sys.stderr)
+    else:
+        print(f"plans: {out.stdout.strip().splitlines()[-1]} ({url} {state}, {took:.1f}s)", flush=True)
+
+
 class Reader:
     def __init__(self, root: Path, repo: str) -> None:
         self.dir = root / repo
@@ -156,9 +180,12 @@ def main(argv: list[str]) -> int:
         deadline = time.monotonic() + args.timeout
         last_verdict = ""
         while True:
-            verdict, lines, code = summarize(reader.read(args.pr_number))
+            pr = reader.read(args.pr_number)
+            verdict, lines, code = summarize(pr)
             if verdict != last_verdict or not args.wait:
                 print("\n".join(lines), flush=True)
+            if verdict in ("MERGED", "CLOSED") and pr.get("url"):
+                record_done(Path(args.stronghold), pr["url"], verdict)
             last_verdict = verdict
             terminal = verdict in ("MERGED", "CLOSED", "OPEN-CI-FAILED")
             if not args.wait or terminal:

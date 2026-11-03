@@ -363,6 +363,16 @@ def _summary(detail: dict) -> dict:
     return out
 
 
+def _flag_master_open(topic_plans: list[dict]) -> None:
+    """Set `master_open` on a finished plan whose topic still holds an unfinished master plan: the topic (and so
+    this plan) stays in open/ until the master finishes, so the page shows it as done rather than in flight."""
+    master_open = any(p["kind"] in MASTER_KINDS and p["finished"] is not True for p in topic_plans)
+    for p in topic_plans:
+        p["master_open"] = bool(
+            master_open and p["state"] != "completed" and p["kind"] not in MASTER_KINDS and p["finished"] is True
+        )
+
+
 def list_plans(plans_dir: Path, include_completed: bool) -> dict:
     plans_dir = Path(plans_dir)
     root = plans_dir.resolve()
@@ -383,10 +393,13 @@ def list_plans(plans_dir: Path, include_completed: bool) -> dict:
                 topic = topic_dir.name
                 if not _valid_segment(topic) or not _is_dir(topic_dir) or not _inside(topic_dir, root):
                     continue
+                topic_plans = []
                 for path in _topic_plans(topic_dir, root):
                     detail = _build(path, root, repo, state, topic, path.stem)
                     if detail is not None:
-                        plans.append(_summary(detail))
+                        topic_plans.append(_summary(detail))
+                _flag_master_open(topic_plans)
+                plans.extend(topic_plans)
         repos.append({"repo": repo, "plans": plans})
     return {"repos": repos}
 

@@ -282,7 +282,7 @@ function needsCompleted(){return statusFilter==='all'||statusFilter==='completed
 function matchStatus(p){
   if(statusFilter==='completed'){return p.state==='completed'}
   if(statusFilter==='open'){return p.state!=='completed'}
-  if(statusFilter==='started'){return p.state!=='completed'&&p.done>0}
+  if(statusFilter==='started'){return p.state!=='completed'&&p.done>0&&!p.master_open}
   if(statusFilter==='notstarted'){return p.state!=='completed'&&!(p.done>0)}
   return true;
 }
@@ -397,7 +397,7 @@ function buildInfo(rec,p){
   }else if(p.kind==='orchestrator'){
     row.appendChild(el('span','pill p-master','orchestrator (legacy)'));
   }
-  row.appendChild(pillBtn(p.state==='completed'?'p-done':'p-open',p.state,statusFilter===p.state,function(){setStatus(statusFilter===p.state?'all':p.state)}));
+  row.appendChild(pillBtn(p.state==='completed'||p.master_open?'p-done':'p-open',p.master_open?'done · master plan open':p.state,statusFilter===p.state,function(){setStatus(statusFilter===p.state?'all':p.state)}));
   row.appendChild(issueNode(p));
   (p.prs||[]).forEach(function(pr){
     if(!isHttps(pr.url)){return}
@@ -894,7 +894,7 @@ function render(data){
   var home=!repoFilter&&statusFilter==="all"&&!kindFilter;
   var inflight=[];
   if(home){
-    data.repos.forEach(function(r){r.plans.forEach(function(p){if(((p.state!=='completed'&&p.done>0)||inReview(p))&&matchKind(p)){inflight.push(p)}})});
+    data.repos.forEach(function(r){r.plans.forEach(function(p){if(((p.state!=='completed'&&p.done>0&&!p.master_open)||inReview(p))&&matchKind(p)){inflight.push(p)}})});
   }
   var inflightKeys=new Set(inflight.map(planKey));
   shown+=inflight.length;
@@ -934,7 +934,7 @@ function render(data){
   var flying=0;
   data.repos.forEach(function(r){
     if(repoFilter&&r.repo!==repoFilter){return}
-    r.plans.forEach(function(p){if(p.state!=='completed'&&p.done>0&&matchKind(p)){flying++}});
+    r.plans.forEach(function(p){if(p.state!=='completed'&&p.done>0&&!p.master_open&&matchKind(p)){flying++}});
   });
   $('flightn').textContent=flying+' in flight';
 }

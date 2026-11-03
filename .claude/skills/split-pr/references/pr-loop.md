@@ -227,7 +227,7 @@ outright, not merely unapproved. Honor the repo's PR template if it has one, exa
 | Part in merge order              | Issue line                                      |
 | -------------------------------- | ----------------------------------------------- |
 | every part except the last       | `Part of #<issue>`                              |
-| the **last** part                | `Closes #<issue>`                               |
+| the **last** part                | `Closes #<issue>` + one per `also_closes` entry |
 | the unrelated-changes part       | `Closes #<its own issue>` — see below           |
 
   The unrelated-changes part is **not part of the original work**, so it gets its **own** issue:
@@ -340,7 +340,7 @@ When re-invoked, **confirm the merge before cutting part *k+1***, from `<part-wt
 clone:
 
 ```
-GH_TOKEN=$(<token-generator>) gh pr view <part-k-PR#> --json state,mergedAt
+~/code/.claude/scripts/pr-state.sh <repo-dir> <part-k-PR#>   # VERDICT: MERGED; also writes pr_done: into the plans
 ```
 
 `state: MERGED` with a non-null `mergedAt` is the confirmation — verified live in plan 9d

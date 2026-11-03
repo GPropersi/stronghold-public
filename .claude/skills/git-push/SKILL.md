@@ -132,6 +132,8 @@ The plan file's YAML frontmatter (written by `/plan-creator` Step 4e) carries th
    - **`<plan-branch>`** — from the `branch:` line, if present. If it is set and does **not** equal `$BRANCH` (the branch you are about to push), STOP and surface it via `AskUserQuestion`: the plan expects branch `<plan-branch>` but you are on `$BRANCH` — this usually means a branch drifted mid-run (work landed on a stray/renamed branch). Offer: (a) push `$BRANCH` anyway and update the plan's `branch:` to match, (b) switch to the plan's worktree (`git -C <worktree> …`) and push `<plan-branch>` from there (offer this only when a `worktree:` frontmatter value exists and is verified against `git -C ~/code/<repo> worktree list --porcelain`; use bare `git ...` instead when `~/code/<repo>` is already the cwd — a redundant `-C` is blocked by a hook), or (c) abort. Never check out `<plan-branch>` to resolve the mismatch. Do not silently push the mismatched branch. (Canonical rule: ~/code/.claude/worktree-discipline.md → Worktree Discipline.)
 
    Issue capture is numeric-only: only a numeric `github_issue:` value is an issue. When it is numeric, capture `<plan-issue-number>` (the integer) and `<plan-issue-url>` (from the `github_issue_url:` line). `github_issue: none` is the explicit waiver: capture nothing, add no `Closes` line, do NOT trigger Step 2d, and print no warning. An empty, `null` or other non-numeric value also captures nothing and surfaces the same final-report warning as a missing key, also without Step 2d.
+
+   Also capture **`<also-closes>`** from an optional `also_closes: [N, N, …]` line: the extra issues a bundled plan fixes (e.g. one plan for three small pre-filed issues). Keep only numeric entries, drop any equal to `<plan-issue-number>`, and print a warning for each non-numeric entry. Absent key = empty list.
 3. Also glob `<plan-dir>/*-master.md`. If exactly one match and its frontmatter has a numeric `github_issue:` (never `none`), capture `<master-issue-number>`. Otherwise skip the umbrella check.
 4. If `<master-issue-number>` was captured, determine whether this is the **final phase**:
    - Read the master plan. For each `**Branch:**` line (excluding the verification phase), find the corresponding sub-plan file within the same topic cluster in the central store (`<plan-dir>`, i.e. `~/code/plans/<repo>/{open,completed}/<topic>/`; master + its sub-plans share one topic folder). Read each sub-plan's `## Status` block.
@@ -599,8 +601,9 @@ If a template exists, **use its section structure as the body skeleton**: keep i
 In both cases, append the `Closes` lines when applicable (sourced from Step 2c / 2d):
 
 - Always append `Closes #<plan-issue-number>` if it was captured.
+- Append one `Closes #<N>` line per `<also-closes>` entry (Step 2c), on its own line, whether or not `<plan-issue-number>` was captured.
 - Also append `Closes #<master-issue-number>` if `<master-issue-number>` was captured AND `<is-final-phase>=true`. This closes the umbrella issue when the final phase merges.
-- If neither was captured (Step 2d "Skip" path), append nothing and include a note in the final report that the PR has no linked issue.
+- If none was captured (Step 2d "Skip" path), append nothing and include a note in the final report that the PR has no linked issue.
 - **Never put a closing keyword before an issue reference anywhere else in the body.** GitHub closes `#N` for `close`/`closes`/`closed`/`fix`/`fixes`/`fixed`/`resolve`/`resolves`/`resolved` followed by `#N`, even inside a negation ("so it does not close #39" closed an umbrella issue with five phases left). In prose write "umbrella #39" or "Part of #39". The check under "Closing references (script)" below enforces this.
 
 **Default structure (only when the repo has no PR template):**
@@ -656,10 +659,10 @@ Judgment the model keeps:
 After creating or updating the PR, verify GitHub's own parse of the body, from `~/code` or the sub-repo cwd:
 
 ```bash
-~/code/.claude/scripts/pr-closing-check.sh <repo-dir> <PR_NUMBER> --expect <plan-issue-number>[,<master-issue-number>] --fix
+~/code/.claude/scripts/pr-closing-check.sh <repo-dir> <PR_NUMBER> --expect <plan-issue-number>[,<also-closes>…][,<master-issue-number>] --fix
 ```
 
-`--expect` lists exactly the issues this PR should close: `<plan-issue-number>`, plus `<master-issue-number>` only when `<is-final-phase>=true`, or `none` when no `Closes` line was added. The script compares the PR's `closingIssuesReferences` with that set; for an unexpected issue it rewrites the closing keyword in the body to `reference` and re-checks. Exit 0 = exact match. Exit 1 = still wrong (a `MISSING` line means the `Closes` line was not written: fix the body and rerun; an unfixable `UNEXPECTED` is linked by hand or by a commit message: report it, never merge). Exit 4 = could not check: STOP and report.
+`--expect` lists exactly the issues this PR should close: `<plan-issue-number>`, every `<also-closes>` entry, plus `<master-issue-number>` only when `<is-final-phase>=true`, or `none` when no `Closes` line was added. Leaving an `<also-closes>` entry out of `--expect` makes `--fix` rewrite its `Closes` to `reference`. The script compares the PR's `closingIssuesReferences` with that set; for an unexpected issue it rewrites the closing keyword in the body to `reference` and re-checks. Exit 0 = exact match. Exit 1 = still wrong (a `MISSING` line means the `Closes` line was not written: fix the body and rerun; an unfixable `UNEXPECTED` is linked by hand or by a commit message: report it, never merge). Exit 4 = could not check: STOP and report.
 
 #### Link the PR to the plan (script)
 

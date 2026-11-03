@@ -466,8 +466,9 @@ does not persist in a subagent.
   with a **mandatory** `--repo <Repo slug>`, prefixed `GH_TOKEN_GENERATOR=<token-generator>` only when
   the seam differs from the wrapper's own resolution order. §7.
 - **5h. Hand back to the user for the merge** — merging is the human's call; the skill resumes from the
-  manifest. Then **confirm the merge programmatically** (`gh pr view --json state,mergedAt`, or
-  `git cherry origin/<default-branch> <part-branch>` as fallback) and only then write `merged` into
+  manifest. Then **confirm the merge programmatically** (`pr-state.sh <repo-dir> <part-PR#>`, read its
+  `VERDICT:` line; it also records the PR in the plans' `pr_done:`, which 5i's sync publishes. Fallback
+  `git cherry origin/<default-branch> <part-branch>`) and only then write `merged` into
   **both** `merge-status` and `status`: a human's "merged" in chat is **not** evidence. Re-fetch, cut
   part *k+1*, and **never chain it off part *k*'s branch** — the squash-merge makes those commits stale
   duplicates the gate hard-blocks, and a PR based on a part branch runs zero checks. §8.
