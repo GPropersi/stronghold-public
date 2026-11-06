@@ -70,6 +70,8 @@ import wf_lint_base as base  # noqa: E402
 STATES = ("open", "completed")
 NUMBER_RE = re.compile(r"^[0-9]+$")
 DEPENDS_RE = re.compile(r"^\*\*Depends on:\*\*\s*(.*)$")
+LETTERED_STEP_RE = re.compile(r"^###[ \t]+(?:Step[ \t]+)?([0-9]+[a-z])[.:)][ \t]+(.*)$")
+STEP_HEADING_RE = re.compile(r"^###[ \t]")
 SLUG_RE = re.compile(r"[:/]([^/:]+/[^/]+?)(?:\.git)?/?$")
 ISSUE_URL_RE = re.compile(r"github\.com/([^/\s]+/[^/\s]+)/(?:issues|pull)/[0-9]+")
 GH_TIMEOUT = 90
@@ -686,13 +688,45 @@ class Reconciler:
             path.write_text("\n".join(self._sub_lines[path]) + ("\n" if original.endswith("\n") else ""), encoding="utf-8")
 
 
-def step_depends(lines: list[str], step: plan_parse.Step) -> list[int]:
+def step_depends(lines: list[str], step: plan_parse.Step) -> list[str]:
+    """Step labels (`6`, `6b`) a step's `**Depends on:**` line names."""
     for text in lines[step.start - 1 : step.end]:
         found = DEPENDS_RE.match(text)
         if found:
             value = found.group(1)
-            return [] if value.strip("`*_ ").lower().startswith("none") else [int(n) for n in re.findall(r"\d+", value)]
+            return [] if value.strip("`*_ ").lower().startswith("none") else re.findall(r"\b\d+[a-z]?\b", value)
     return []
+
+
+def lettered_steps(lines: list[str]) -> list[plan_parse.Step]:
+    """Steps whose heading carries a letter suffix (`### 5b. ...`), which `plan_parse` does not see.
+
+    `Step.n` holds the label string (`5b`) so these can sit beside the numbered steps in `next_actions`.
+    """
+    found: list[plan_parse.Step] = []
+    fence = False
+    current: plan_parse.Step | None = None
+    for number, line in enumerate(lines, start=1):
+        if line.lstrip().startswith(("```", "~~~")):
+            fence = not fence
+            continue
+        if fence:
+            continue
+        heading = LETTERED_STEP_RE.match(line)
+        if heading or line.startswith("## ") or STEP_HEADING_RE.match(line):
+            if current is not None:
+                current.end = number - 1
+                found.append(current)
+                current = None
+            if heading:
+                current = plan_parse.Step(heading.group(1), heading.group(2).strip(), number, number)  # type: ignore[arg-type]
+            continue
+        if current is not None:
+            plan_parse._master_field(current, line)
+    if current is not None:
+        current.end = len(lines)
+        found.append(current)
+    return found
 
 
 def step_settled(step: plan_parse.Step, no_pr: bool) -> bool:
@@ -716,8 +750,9 @@ def next_actions(store: Store, bucket: str, repo: str, topic_name: str | None) -
             if not (doc.type == "master" or (doc.type is None and "master" in master.stem.lower())):
                 continue
             lines = master.read_text(encoding="utf-8").splitlines()
-            settled = {s.n for s in doc.steps if step_settled(s, no_pr)}
-            pending = [s for s in doc.steps if s.n not in settled and (s.branch or s.sub_plan_link)]
+            steps = sorted([*doc.steps, *lettered_steps(lines)], key=lambda s: s.start)
+            settled = {str(s.n) for s in steps if step_settled(s, no_pr)}
+            pending = [s for s in steps if str(s.n) not in settled and (s.branch or s.sub_plan_link)]
             if not pending:
                 out.append(f"NEXT [{master.stem}]: every step is merged; complete the master with plan-lifecycle.sh complete")
                 continue
