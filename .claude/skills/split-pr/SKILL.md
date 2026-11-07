@@ -503,11 +503,18 @@ resolves its target from the Bash cwd, which does **not** persist in a subagent;
   (`allow-git-ops.sh` only *defers* `branch:-D`; `Bash(git branch:*)` then allows it). Clear the branch's
   worktree (`make wt-rm`) or git refuses; `git branch -D` (`-d` fails "not fully merged"), then
   `gh-bot.sh api -X DELETE repos/<Repo slug>/git/refs/heads/<branch>` — never `git push --delete`. §2.
-- **6c. Record, never rewrite.** Leave the plan's checkboxes and `branch:` alone; add `split_into:` below
-  the `github_issue*` keys, close out the manifest, then **update the master plan** if the plan is a
-  phase of one (disposition §3: set that phase's `**Status:**` to `merged` with every part PR incl. HP and
-  the final merge date + sha; also fix a stale `**Status:**` on an earlier phase this one `Depends on` only
-  if its merge is verifiable), then **sync** via 1g's five-call sequence. §3-§4.
+- **6c. Record, never rewrite.** Leave the plan's `branch:` and its implementation checkboxes alone; add
+  `split_into: [<every part PR#, incl. HP>]` (inline list) below the `github_issue*` keys. **This key is
+  what lets `make plan-reconcile MERGED=1` mark the master step merged** — a split branch was never pushed,
+  so without it the reconcile finds no merged PR and leaves the master at "done — awaiting merge".
+  Then close out the manifest and finish the plan's own bookkeeping, **when every plan step is verifiably
+  done** (never assume): tick a "split the PR" to-do the plan carries (this split fulfils it), set
+  `finished: true`, and drop a `worktree:` frontmatter key whose worktree `make wt-rm` removed. Then
+  **update the master plan** if the plan is a phase of one: run `make plan-reconcile REPO=<repo> MERGED=1`
+  (it ticks the step's boxes and writes `merged — PRs #A–#B (date, sha)`; a plan not yet `finished: true`
+  is skipped). Fall back to disposition §3's manual `**Status:**` edit only if it cannot (also fix a stale
+  `**Status:**` on an earlier phase this one `Depends on` only if its merge is verifiable). Finally
+  **sync** via 1g's five-call sequence. §3-§4.
 - **6d. Warn about the one-PR assumptions** when handing back: parts go strictly **one at a time** (one
   fixed-name topic `tmp/`, shared and wiped); `/pr-review` usually lands on a picker where **"Skip plan
   conformance"** is right, and flags every step missed if a plan *is* resolved; `/git-push`'s

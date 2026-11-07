@@ -73,4 +73,7 @@ Same five artifacts, so 1f's and `disposition.md` §2's `test -s` checks hold un
 - **6b:** the original branch was never pushed. Archive re-check and your own `AskUserQuestion` still
   gate the local `git branch -D`; skip the remote `refs/heads` DELETE unless
   `git ls-remote --heads origin <branch>` shows the ref.
-- **6c, 6d:** unchanged.
+- **6c:** do not skip it. A pre-PR plan has no pushed branch, so `split_into:` is the only way
+  `make plan-reconcile MERGED=1` can find the merged PRs. Also remove the plan's `worktree:` key (the
+  original worktree is removed in 6b; its `wt-rm` must come first or `git branch -D` refuses).
+- **6d:** unchanged.
