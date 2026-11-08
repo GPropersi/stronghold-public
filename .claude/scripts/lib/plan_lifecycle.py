@@ -470,8 +470,13 @@ def split_pr_numbers(plan: Path) -> list[int]:
         else:
             capturing = False
     text = "\n".join(chunk)
-    keyed = re.findall(r"\bpr:\s*(\d+)", text)
-    return sorted({int(n) for n in (keyed or re.findall(r"\d+", text))})
+    # Prefer explicit PR references: a bare-digit fallback also grabs the `4` of `ORG` in a URL or the `5` of `5 PRs`.
+    found = (
+        re.findall(r"\bpr:\s*(\d+)", text)
+        or re.findall(r"(?:/pull/|#)(\d+)", text)
+        or re.findall(r"\d+", text)
+    )
+    return sorted({int(n) for n in found})
 
 
 def pr_label(numbers: list[int]) -> str:
@@ -670,10 +675,14 @@ class Reconciler:
         text = master.read_text(encoding="utf-8")
         lines = text.splitlines()
         changed = False
+        # `plan_parse` folds a lettered phase (`### 6b. ...`) into the numbered step above it, so that step's merge
+        # must not tick or convert the lettered phase's boxes: it has its own, separate, unbuilt work.
+        lettered = lettered_steps(lines)
         # Last step first: a Status line inserted in one step must not shift the line numbers of earlier steps.
         for step in reversed(doc.steps):
             if step.sub_plan_link is None and step.branch is None:
                 continue
+            step.boxes = [b for b in step.boxes if not any(s.start <= b.line <= s.end for s in lettered)]
             self.matched += 1
             if self.reconcile_step(master, step, lines):
                 changed = True
