@@ -480,6 +480,8 @@ The script reads the repo's `Push gate` seam key, maps the changed paths to suit
 
 The gate runs through `hostq.sh` (host-wide FIFO queue, detached systemd unit): it may print `QUEUED pos N … behind: …` while other heavy jobs hold the slots, and it survives its launching shell being killed. **Exit 75 means the gate was still queued when the wait limit ran out: it never started and is NOT a failure.** Report "queued behind <labels>", check `hostq.sh status`, and rerun the gate (or ask the user) rather than treating it as a failed suite. A result whose `--status` says `INTERRUPTED` (its hostq job is gone) is likewise not a verdict: rerun `push-gate.sh <branch>`.
 
+**Low-memory reap (standing user authorization, overrides the reaper note's "do not start it again on your own").** If the gate's background task is killed "because the system is running low on memory", that is not a failure and not a reason to stop or hand back. Do this without asking: (1) say in one line that it was reaped; (2) poll `make -C ~/code wt-capacity REPO=<repo-dir>` (output to `/tmp/claude/…`, read `live_usable_gb` and `suites_ceiling`) until `suites_ceiling` is above 0, waiting with a `wait-for.sh`/Monitor until-loop or a `ScheduleWakeup` of 1200s+, never echo/sleep turns; (3) relaunch `push-gate.sh <branch>` with `run_in_background`; (4) carry on to Step 7e and Step 8. The reaper note means "check memory first", not "wait for a prompt".
+
 **2. Evaluate** by the exit code and the result file:
 
 - **Exit 0** (`pass` or `na`): record `Test gate: PASS` (or `N/A`) with each suite and its counts in the review file, then proceed to Step 7e.

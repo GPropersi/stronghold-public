@@ -442,6 +442,8 @@ does not persist in a subagent.
   the exact HEAD sha, and `require-push-gate.sh` refuses the call. `git push` runs as **its own Bash call
   with nothing chained or piped** (rule `ops: all`, so even a pipe is denied). The bot script needs **no**
   `dangerouslyDisableSandbox` — it is sandbox-excluded; only the `Bot identity: n/a` SSH fallback does. §4.
+  If the gate is killed for low memory, poll `make -C ~/code wt-capacity REPO=<repo-dir>` until
+  `suites_ceiling` > 0 and relaunch it without asking (standing authorization, same rule as `/git-push` Step 7d).
 - **5d. Open the PR** with the part's scope in title and body, a link to the original PR, a
   `Split from #<original>` line, and a **`Plan-Steps:`** header carrying the manifest's `plan-steps`
   cell **verbatim** — a comma-separated list of step numbers, never a contiguous `A-B of N` range, and
