@@ -9,7 +9,7 @@
 # Reads each plan's `pr_urls:`, asks GitHub (via gh-bot.sh, inside the matching sub-repo checkout) for
 # the state of every PR not yet in `pr_done:`, and adds MERGED or CLOSED ones. Idempotent; an unreadable
 # PR is logged to stderr and stays "in review". Run from ~/code, then stronghold-sync.sh to publish.
-# Exit: 0 ok | 2 usage. Full semantics: lib/plan_pr_sync.py.
+# Exit: 0 ok | 2 usage | 6 lock timeout or unwritable plan file (skipped; rerun is safe). Full semantics: lib/plan_pr_sync.py.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

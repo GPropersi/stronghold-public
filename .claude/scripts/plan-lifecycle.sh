@@ -15,7 +15,7 @@
 #
 # Env: STRONGHOLD_DIR      override the stronghold root (test seam)
 #      PLAN_LIFECYCLE_GH   gh wrapper to run (default gh-bot.sh)
-# Exit: 0 ok | 1 audit drift | 2 usage | 3 topic not finishable | 4 unavailable
+# Exit: 0 ok | 1 audit drift | 2 usage | 3 topic not finishable | 4 unavailable | 6 lock timeout or unwritable plan file
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

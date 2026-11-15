@@ -50,6 +50,11 @@ Determine the mode based on user intent:
 - Resolve the plan from the **Plans store (central)**, keyed by the working repo's `<repo>` (the `Plans bucket` seam key). Search `~/code/plans/<repo>/open/<topic>/<name>.md` FIRST, then `~/code/plans/<repo>/completed/<topic>/<name>.md`, matching **$ARGUMENTS** contextually (e.g., glob `~/code/plans/<repo>/{open,completed}/**/<name>.md`). Derive the `<topic>` from the plan file's parent directory name.
 - Get the outline and the next incomplete step in one call: `~/code/.claude/scripts/plan-status.sh <repo>/<plan-name>` (frontmatter, per-step line ranges and checkbox progress, the non-step sections). Then read the shared context plus ONLY the step you will execute: `plan-status.sh <repo>/<plan-name> --step next --with-context` (or `--step N`). That output holds everything before the first step (Summary, Research Findings, shared reference sections) and your step; read another step (`--step M`) only when yours refers to it. Because `Edit` requires a prior `Read` of the file, use the `Read` tool with `offset`/`limit` on your step's line range before you tick checkboxes in Step 4, not a full-plan read. Fall back to reading the whole plan when it has no `### N.` step headings.
 
+### Step 1b: Stamp the Step Start
+- Once the step number `<N>` is resolved and before Step 2, run `~/code/.claude/scripts/plan-mark.sh <repo>/<plan-name> start <N>`. Then re-Read the step's line range: plan-mark inserted a line and replaced the file, so earlier line numbers and the Edit tool's read state are stale.
+- **A stamp failure never blocks the work** (stamps are bookkeeping). Exit 6 (lock timeout or write failure): retry once, then continue with a one-line warning. Exit 5 (ambiguous plan name, same stem in two topics) and exit 3 (malformed existing stamp): never retry, report the stderr (candidates / offending line) in one line and continue. Any other non-zero: report it and continue.
+- Review mode never stamps: no `plan-mark.sh` call anywhere in the Review Mode Workflow.
+
 ### Step 2: Execute the Step
 - **Context discipline** (every turn re-reads your whole context, and executors past ~150k are the costly ones): send command output you expect to exceed ~50 lines to a `/tmp/claude/...` file and read it with `Read` limit or `grep -m`/`-l`; prefer `Read` with offset/limit or `grep -n` over `cat`/full-file reads for files you only need part of; batch independent reads into one message. None of this changes what you must read to implement the step correctly.
 - Read all files mentioned in the current step before making changes
@@ -108,8 +113,12 @@ Run with `run-suite.sh`:
 #### Update the Finished Flag:
 - If all steps are complete, first run `~/code/.claude/scripts/plan-status.sh <repo>/<plan-name> --verify`; on exit 5 STOP and report the unticked boxes it prints. Otherwise set `finished: true` under the plan's `## Status` heading (never in frontmatter).
 
+#### Stamp the Step Done:
+- Right after the Finished Flag edit (the last plan Edit in this step, so no Edit follows a plan-mark rewrite; plan-mark resolves the plan in `open/` or `completed/`, so ordering against "Move the Finished Topic" is safe), run `~/code/.claude/scripts/plan-mark.sh <repo>/<plan-name> done <N>`. If a verify failure stopped you before the Finished Flag, do not stamp `done`.
+- Same non-blocking handling as the start stamp: a stamp failure does not block; exit 6 retried once, exits 5 and 3 reported without retry, any other non-zero reported, then continue. Plan mode only.
+
 #### Reconcile the Master Plan:
-- After a sub-plan finishes, run `~/code/.claude/scripts/plan-lifecycle.sh reconcile <repo-dir> <topic>` (its edits are covered by the end-of-step stronghold sync). Exit 1 (no master step in the topic) and exit 4 are non-fatal: note them in the report and continue.
+- After a sub-plan finishes, run `~/code/.claude/scripts/plan-lifecycle.sh reconcile <repo-dir> <topic>` (its edits are covered by the end-of-step stronghold sync). Exit 1 (no master step in the topic), exit 4 and exit 6 (a plan file was locked and skipped; rerun-safe, a later reconcile converges) are non-fatal: note them in the report and continue.
 
 #### Move the Finished Topic (lifecycle — topic-as-unit):
 **CRITICAL: This skill owns the open → completed lifecycle move.** When the whole topic becomes fully done — the master plan AND all its sub-plans have `finished: true` — after flipping the frontmatter, run the script (never a hand-typed `git mv`):

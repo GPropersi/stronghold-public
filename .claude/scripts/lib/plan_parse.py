@@ -16,6 +16,7 @@ import os
 import re
 import sys
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 STEP_RE = re.compile(r"^###[ \t]+(?:Step[ \t]+)?([0-9]+)[.:)][ \t]+(.*)$")
@@ -30,6 +31,9 @@ FINISHED_RE = re.compile(r"^finished:\s*(true|false)\s*$", re.IGNORECASE)
 SUBPLAN_RE = re.compile(r"^\*\*Sub-plan:\*\*[ \t]*(.*?)[ \t]*$")
 BRANCH_RE = re.compile(r"^\*\*Branch:\*\*[ \t]*(.*?)[ \t]*$")
 STATUS_RE = re.compile(r"^\*\*Status:\*\*[ \t]*(.*?)[ \t]*$")
+STARTED_RE = re.compile(r"^\*\*Started:\*\*[ \t]*(\S+)[ \t]*$")
+DONE_RE = re.compile(r"^\*\*Done:\*\*[ \t]*(\S+)[ \t]*$")
+MASTER_PLAN_RE = re.compile(r"^\*\*Master plan:\*\*[ \t]*(.*?)[ \t]*$")
 MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 MANUAL_TAG_RE = re.compile(r"^\(manual,[ \t]*post-merge\)")
@@ -56,6 +60,8 @@ class Step:
     branch: str | None = None
     status: str | None = None
     summary: list[str] = field(default_factory=list)  # plain-English bullets under `**Summary:**`
+    started: str | None = None  # raw `**Started:**` value (first match), None when absent
+    done_at: str | None = None  # raw `**Done:**` value (first match), None when absent
 
 
 @dataclass
@@ -74,6 +80,7 @@ class PlanDoc:
     stray_boxes: list[Box]
     progress_tracking_present: bool
     h1_count: int
+    master_plan_link: str | None = None  # `**Master plan:**` link target before the first `### ` heading
 
 
 @dataclass
@@ -132,6 +139,11 @@ def parse_plan(path: str | Path) -> PlanDoc:
         text = Path(path).read_text()
     except (OSError, UnicodeDecodeError):
         text = ""
+    return parse_text(text, path)
+
+
+def parse_text(text: str, path: str | Path) -> PlanDoc:
+    """parse_plan over text already in hand (e.g. re-read inside a lock); `path` only labels the doc."""
     lines = text.splitlines()
     front, body_start = _split_frontmatter(lines)
 
@@ -146,6 +158,8 @@ def parse_plan(path: str | Path) -> PlanDoc:
     h1_count = 0
     fence: str | None = None
     summarizing = False
+    heading_seen = False
+    master_plan_link: str | None = None
 
     def close(end_line: int) -> None:
         nonlocal current
@@ -165,6 +179,14 @@ def parse_plan(path: str | Path) -> PlanDoc:
         if fenced:
             fence = fenced.group(1)
             continue
+        if line.startswith("### "):
+            heading_seen = True
+        elif not heading_seen and master_plan_link is None:
+            backref = MASTER_PLAN_RE.match(line)
+            if backref:
+                link = MD_LINK_RE.search(backref.group(1))
+                if link:
+                    master_plan_link = link.group(1)
         if line.startswith("# "):
             h1_count += 1
         in_progress = section == "progress tracking"
@@ -228,7 +250,38 @@ def parse_plan(path: str | Path) -> PlanDoc:
         stray_boxes=stray,
         progress_tracking_present=progress_seen,
         h1_count=h1_count,
+        master_plan_link=master_plan_link,
     )
+
+
+def parse_stamp(value: str | None) -> datetime | None:
+    """Parse a stamp value; only offset-bearing ISO datetimes count (naive or malformed -> None)."""
+    if not value:
+        return None
+    text = value.strip()
+    if text.endswith(("Z", "z")):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed
+
+
+def reconcile_skip_reason(doc: PlanDoc, path: str | Path) -> str | None:
+    """Why `plan_lifecycle.Reconciler.reconcile_master` (and the plan-mark start roll-up) ignores this master.
+
+    "orchestrator" | "not-master" | "legacy" | None (a real master). Shared so both stay in step.
+    """
+    if doc.effective_type == "orchestrator":
+        return "orchestrator"
+    if not (doc.type == "master" or (doc.type is None and "master" in Path(path).stem.lower())):
+        return "not-master"
+    if doc.legacy:
+        return "legacy"
+    return None
 
 
 def _master_field(step: Step, line: str) -> None:
@@ -248,6 +301,14 @@ def _master_field(step: Step, line: str) -> None:
     found = STATUS_RE.match(line)
     if found and step.status is None:
         step.status = found.group(1)
+        return
+    found = STARTED_RE.match(line)
+    if found and step.started is None:
+        step.started = found.group(1)
+        return
+    found = DONE_RE.match(line)
+    if found and step.done_at is None:
+        step.done_at = found.group(1)
 
 
 def resolve_link(plan_path: str | Path, link: str) -> Resolved:

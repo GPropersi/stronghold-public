@@ -46,6 +46,7 @@ that moved restarts issue numbering, so its recorded number could hit an unrelat
 Env: PLAN_LIFECYCLE_GH  gh wrapper to run (default: gh-bot.sh beside this script's parent); it runs with the repo
                         directory as cwd because the bot installation is picked from the cwd's origin.
 Exit: 0 ok | 1 audit found drift | 2 usage | 3 topic not finishable | 4 unavailable (missing bucket/topic/slug, gh failed)
+      | 6 a plan file was locked or unwritable and skipped (non-fatal, rerun is safe)
 """
 
 from __future__ import annotations
@@ -63,6 +64,7 @@ LIB_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB_DIR))
 
 import plan_backfill  # noqa: E402
+import plan_mark  # noqa: E402
 import plan_parse  # noqa: E402
 import wf_frontmatter  # noqa: E402
 import wf_lint_base as base  # noqa: E402
@@ -77,7 +79,7 @@ ISSUE_URL_RE = re.compile(r"github\.com/([^/\s]+/[^/\s]+)/(?:issues|pull)/[0-9]+
 GH_TIMEOUT = 90
 NON_PLAN_TYPES = plan_backfill.NON_PLAN_TYPES
 
-OK, DRIFT, USAGE, UNFINISHED, UNAVAILABLE = 0, 1, 2, 3, 4
+OK, DRIFT, USAGE, UNFINISHED, UNAVAILABLE, LOCKED = 0, 1, 2, 3, 4, 6
 
 
 class Unavailable(Exception):
@@ -519,6 +521,11 @@ class Reconciler:
         self._sub_lines: dict[Path, list[str]] = {}
         self._sub_dirty: set[Path] = set()
         self._lookups: dict[str, dict | None] = {}
+        # phase: "live" prints directly; "record" (unlocked prefetch) is silent and leaves no sub-plan state; "lock"
+        # (inside locked_rewrite) buffers prints and never calls gh; "quiet" is silent.
+        self.phase = "live"
+        self._buffer: list[tuple[str, bool]] = []
+        self.lock_failed = False
 
     def rel(self, path: Path) -> str:
         try:
@@ -526,12 +533,42 @@ class Reconciler:
         except ValueError:
             return str(path)
 
+    def say(self, message: str, err: bool = False) -> None:
+        if self.phase in ("record", "quiet"):
+            return
+        if self.phase == "lock":
+            self._buffer.append((message, err))
+            return
+        print(message, file=sys.stderr if err else sys.stdout)
+
+    def locked(self, path: Path, fn) -> bool:
+        """locked_rewrite with buffered prints; a lock failure or vanished file is a stderr note and a skip."""
+        self._buffer = []
+        dirty_before = set(self._sub_dirty)
+        try:
+            wrote = plan_mark.locked_rewrite(path, fn)
+        except plan_mark.LockError as exc:
+            self.lock_failed = True
+            self._sub_dirty = dirty_before
+            print(f"note     {self.rel(path)}: locked or unwritable, skipped ({exc}); rerun to converge", file=sys.stderr)
+            return False
+        except FileNotFoundError:
+            self._sub_dirty = dirty_before
+            print(f"note     {self.rel(path)}: vanished before the locked re-read; skipped", file=sys.stderr)
+            return False
+        finally:
+            self.phase = "live"
+        buffered, self._buffer = self._buffer, []
+        for message, err in buffered:
+            print(message, file=sys.stderr if err else sys.stdout)
+        return wrote
+
     def tick(self, lines: list[str], path: Path, box: plan_parse.Box) -> bool:
         if not UNTICKED_RE.match(lines[box.line - 1]):
             return False
         lines[box.line - 1] = MARKER_RE.sub(r"\1x", lines[box.line - 1], count=1)
         verb = "would tick" if self.dry_run else "ticked    "
-        print(f"{verb}{' ' if self.dry_run else ''}{self.rel(path)}:{box.line} {box.text}")
+        self.say(f"{verb}{' ' if self.dry_run else ''}{self.rel(path)}:{box.line} {box.text}")
         return True
 
     def sub_lines(self, path: Path) -> list[str]:
@@ -540,11 +577,14 @@ class Reconciler:
         return self._sub_lines[path]
 
     def find_sub(self, master: Path, step: plan_parse.Step) -> Path | None:
+        # Keep in step with plan_mark.match_master_step (the roll-up's reimplementation: plan_lifecycle imports
+        # plan_mark, so it cannot import this). This scans only the master's own topic folder, so the two can differ
+        # for cross-topic masters.
         link = step.sub_plan_link
         if link and link != "none":
             found = plan_parse.resolve_link(master, link)
             if found.kind == "dangling":
-                print(f"note     {self.rel(master)}: step {step.n} sub-plan link `{link}` is dangling; left untouched")
+                self.say(f"note     {self.rel(master)}: step {step.n} sub-plan link `{link}` is dangling; left untouched")
                 return None
             return found.path if found.path is not None and found.path.is_file() else None
         branch = step.branch
@@ -558,6 +598,9 @@ class Reconciler:
     def merged_pr(self, branch: str) -> dict | None:
         if branch in self._lookups:
             return self._lookups[branch]
+        if self.phase == "lock":  # gh never runs under the lock: treat a miss as no hit, next run picks it up
+            self.say(f"note     merged-PR lookup for `{branch}` was not prefetched (plan changed); skipped this run", err=True)
+            return None
         found: dict | None = None
         try:
             out = self.store.run_gh(
@@ -577,6 +620,9 @@ class Reconciler:
         key = "split:" + ",".join(map(str, prs))
         if key in self._lookups:
             return self._lookups[key]
+        if self.phase == "lock":
+            self.say(f"note     split-PR lookup for {prs} was not prefetched (plan changed); skipped this run", err=True)
+            return None
         found: dict | None = None
         try:
             rows = []
@@ -613,7 +659,17 @@ class Reconciler:
             lines.insert(after, text)
             number = after + 1
         verb = "would set " if self.dry_run else "status    "
-        print(f"{verb}{self.rel(master)}:{number} {value}")
+        self.say(f"{verb}{self.rel(master)}:{number} {value}")
+
+    def stamp_done(self, master: Path, step: plan_parse.Step, lines: list[str]) -> None:
+        """Add `**Done:**` to the step when absent (a malformed existing stamp is a note, never an abort)."""
+        try:
+            stamped = plan_mark.stamp_step("\n".join(lines), step.n, "done", plan_mark.now_stamp())
+        except (plan_mark.MalformedStamp, plan_mark.PlanNotFound) as exc:
+            self.say(f"note     {self.rel(master)}: step {step.n} **Done:** stamp skipped: {exc}", err=True)
+            return
+        if stamped is not None:
+            lines[:] = stamped.split("\n")
 
     def reconcile_step(self, master: Path, step: plan_parse.Step, lines: list[str]) -> bool:
         sub = self.find_sub(master, step)
@@ -660,41 +716,78 @@ class Reconciler:
         if new_status is not None:
             self.set_status(lines, master, step, new_status)
             changed = True
+            unsettled = current is None or current.startswith(("todo", "in-progress"))
+            if unsettled and new_status.startswith(("done", "merged")):
+                self.stamp_done(master, step, lines)
         return changed
 
     def reconcile_master(self, master: Path) -> None:
         doc = plan_parse.parse_plan(master)
-        if doc.effective_type == "orchestrator":
+        reason = plan_parse.reconcile_skip_reason(doc, master)
+        if reason == "orchestrator":
             print(f"note     {self.rel(master)}: orchestrator master ignored")
-            return
-        if not (doc.type == "master" or (doc.type is None and "master" in master.stem.lower())):
-            return
-        if doc.legacy:
+        elif reason == "legacy":
             print(f"note     {self.rel(master)}: legacy plan ignored")
+        if reason is not None:
             return
-        text = master.read_text(encoding="utf-8")
-        lines = text.splitlines()
-        changed = False
-        # `plan_parse` folds a lettered phase (`### 6b. ...`) into the numbered step above it, so that step's merge
-        # must not tick or convert the lettered phase's boxes: it has its own, separate, unbuilt work.
-        lettered = lettered_steps(lines)
-        # Last step first: a Status line inserted in one step must not shift the line numbers of earlier steps.
-        for step in reversed(doc.steps):
-            if step.sub_plan_link is None and step.branch is None:
-                continue
-            step.boxes = [b for b in step.boxes if not any(s.start <= b.line <= s.end for s in lettered)]
-            self.matched += 1
-            if self.reconcile_step(master, step, lines):
-                changed = True
-        if changed and not self.dry_run:
-            master.write_text("\n".join(lines) + ("\n" if text.endswith("\n") else ""), encoding="utf-8")
+        try:
+            text = master.read_text(encoding="utf-8")
+        except OSError as exc:
+            print(f"note     {self.rel(master)}: unreadable ({exc}); skipped", file=sys.stderr)
+            return
+        if self.dry_run:  # unlocked, live gh, prints "would ...", never writes
+            self._apply(master, text, "live")
+            return
+        # Prefetch: the same step loop on the unlocked read learns which gh lookups are needed (and counts `matched`).
+        self._apply(master, text, "record")
+        # The text that gets edited is the text re-read under the lock, so a concurrent stamp is never lost.
+        self.locked(master, lambda current: self._apply(master, current, "lock"))
+
+    def _apply(self, master: Path, text: str, phase: str) -> str | None:
+        """Run the step loop over `text`; returns the new text or None when nothing changed."""
+        self.phase = phase
+        saved = ({k: list(v) for k, v in self._sub_lines.items()}, set(self._sub_dirty))
+        try:
+            doc = plan_parse.parse_text(text, master)
+            lines = text.splitlines()
+            changed = False
+            # `plan_parse` folds a lettered phase (`### 6b. ...`) into the numbered step above it, so that step's
+            # merge must not tick or convert the lettered phase's boxes: it has its own, separate, unbuilt work.
+            lettered = lettered_steps(lines)
+            # Last step first: a Status line inserted in one step must not shift the line numbers of earlier steps.
+            for step in reversed(doc.steps):
+                if step.sub_plan_link is None and step.branch is None:
+                    continue
+                step.boxes = [b for b in step.boxes if not any(s.start <= b.line <= s.end for s in lettered)]
+                if phase != "lock":
+                    self.matched += 1
+                if self.reconcile_step(master, step, lines):
+                    changed = True
+            if not changed:
+                return None
+            return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+        finally:
+            if phase == "record":
+                self._sub_lines, self._sub_dirty = saved
+            if phase != "lock":
+                self.phase = "live"
 
     def flush(self) -> None:
+        """Write converted sub-plans, each through the lock on the re-read text."""
         if self.dry_run:
             return
-        for path in self._sub_dirty:
-            original = path.read_text(encoding="utf-8")
-            path.write_text("\n".join(self._sub_lines[path]) + ("\n" if original.endswith("\n") else ""), encoding="utf-8")
+        for path in sorted(self._sub_dirty):
+
+            def rewrite(text: str, path: Path = path) -> str | None:
+                self.phase = "quiet"
+                doc = plan_parse.parse_text(text, path)
+                boxes = [b for s in doc.steps for b in s.boxes] + doc.stray_boxes
+                lines = text.splitlines()
+                if not self.convert_post_merge(lines, path, boxes):
+                    return None
+                return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+
+            self.locked(path, rewrite)
 
 
 def step_depends(lines: list[str], step: plan_parse.Step) -> list[str]:
@@ -815,7 +908,9 @@ def cmd_reconcile(store: Store, args: argparse.Namespace) -> int:
             print("\n".join(lines))
     if args.topic and rec.matched == 0:
         print(f"note     no master step found for topic `{args.topic}`", file=sys.stderr)
-        return DRIFT
+        return LOCKED if rec.lock_failed else DRIFT
+    if rec.lock_failed:  # 6 wins over 4 and 1: a skipped file converges on rerun
+        return LOCKED
     if rec.lookups_failed and not rec.lookups_ok:
         return UNAVAILABLE
     return OK

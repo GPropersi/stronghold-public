@@ -7,7 +7,7 @@
 #   plan-pr-link.sh add <plan-file> <pr-url>
 #
 # Idempotent (a URL already linked changes nothing); only https://github.com/<owner>/<repo>/pull/<n> is accepted.
-# Exit: 0 ok | 2 usage or bad URL | 3 missing file or no frontmatter. Full semantics: lib/plan_pr_link.py.
+# Exit: 0 ok | 2 usage or bad URL | 3 missing file or no frontmatter | 6 lock timeout or unwritable plan file. Full semantics: lib/plan_pr_link.py.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

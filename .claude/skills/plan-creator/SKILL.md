@@ -208,7 +208,7 @@ finished: false
    **Sub-plan:** [<sub-plan-name>](../<topic>/<sub-plan-name>.md)
    ```
 
-   If the step already has a `**Sub-plan:** none` line, replace it with the link instead of adding a second line. Also set that step's `**Status:**` line to `in-progress` (when it currently starts with `todo`). This makes the master → sub-plan relationship navigable from the master file.
+   If the step already has a `**Sub-plan:** none` line, replace it with the link instead of adding a second line. Leave that step's `**Status:**` as `todo`: it flips to `in-progress` (with a `**Started:**` stamp) only when the sub-plan's first step starts, via the `plan-mark.sh … start` roll-up. This makes the master → sub-plan relationship navigable from the master file.
 
 2. **Sub-plan → master backref:** Insert a `**Master plan:**` field into the sub-plan file, immediately after the `## Summary` heading (before the summary text). Derive `<master-parent-topic>` from the master file's parent directory (the directory the master lives in). Format:
 

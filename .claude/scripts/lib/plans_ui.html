@@ -53,6 +53,7 @@ button.pbtn[aria-pressed="true"]{box-shadow:inset 0 0 0 2px currentColor;font-we
 .p-open{color:var(--open);border-color:var(--open)}
 .p-done{color:var(--ok);background:var(--ok-bg);border-color:var(--ok)}
 .p-drift{color:var(--danger);background:var(--danger-bg);border-color:var(--danger)}
+.p-edit{color:var(--muted);border-color:var(--rule)}
 .meta{color:var(--muted);font-size:.8125rem;margin-top:.25rem;display:flex;flex-wrap:wrap;gap:.25rem 1rem}
 .bar{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem .75rem;margin-top:.5rem}
 .track{flex:1;min-width:6rem;height:8px;border-radius:4px;background:var(--track);overflow:hidden}
@@ -106,6 +107,20 @@ button.sechead[aria-expanded="true"] .chev{transform:rotate(45deg)}
 .child{font-size:.8125rem;color:var(--muted);margin-top:.25rem}
 .derr{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;color:var(--danger)}
 .empty{color:var(--muted);padding:1rem;border:1px dashed var(--rule);border-radius:var(--radius)}
+.note{font-size:.8125rem;color:var(--defer);background:var(--defer-bg);border:1px dashed var(--defer);border-radius:var(--radius);padding:.35rem .75rem;margin-top:.25rem}
+#activity.stale{opacity:.5}
+#activity ul.evs{list-style:none;margin:0;padding:0;background:var(--panel);border:1px solid var(--rule);border-radius:var(--radius)}
+#activity li.ev{display:grid;grid-template-columns:3.25rem 1fr;gap:.15rem .75rem;padding:.6rem 1rem;border-top:1px solid var(--rule)}
+#activity li.ev:first-child{border-top:0}
+#activity li.ev time{grid-row:1/span 3;font-variant-numeric:tabular-nums;color:var(--muted);padding-top:.1rem}
+#activity li.ev .pill{white-space:nowrap}
+.ev-top{display:flex;flex-wrap:wrap;gap:.25rem .5rem;align-items:center}
+.ev-title{font-weight:600}
+.ev-step{font-size:.875rem}
+.ev-meta{font-size:.8125rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:.1rem .75rem}
+.ev-meta .was{font-weight:600}
+.ev-meta .was-done{color:var(--ok)}
+#activity button.showolder{margin-top:1rem;width:100%;justify-content:center}
 header{position:relative}
 #menu{display:none}
 button.icon{padding:0;width:2.75rem;justify-content:center}
@@ -135,13 +150,14 @@ header{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.
 #menu{display:inline-flex}
 h1{grid-row:1;grid-column:2;margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ctl{display:contents}
-#repolab,#kindlab,#th,#updated,#refresh .lbl{display:none}
+#viewlab,#repolab,#kindlab,#th,#updated,#refresh .lbl{display:none}
 #refresh{grid-row:1;grid-column:3;padding:0;width:2.75rem;justify-content:center}
 #statuslab{display:none}
 #pillbar{display:flex;grid-column:1/-1;gap:.5rem;overflow-x:auto;scrollbar-width:none;padding:.125rem 0 .25rem}
 #pillbar::-webkit-scrollbar{display:none}
 main{padding:.5rem .75rem}
 .card{padding:.25rem .75rem .75rem}
+#activity li.ev{grid-template-columns:2.75rem 1fr;padding:.6rem .75rem;gap:.15rem .5rem}
 }
 @media (prefers-reduced-motion:reduce){.chev{transition:none}}
 </style>
@@ -151,6 +167,7 @@ main{padding:.5rem .75rem}
   <button id="menu" class="icon" type="button" aria-label="Menu" aria-expanded="false" aria-controls="drawer"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
   <h1 id="ttl">Plans</h1>
   <div class="ctl">
+    <label class="tog filt" id="viewlab"><span class="k">View</span> <select id="view"><option value="plans">Plans</option><option value="activity">Activity</option></select><span class="caret" aria-hidden="true"></span></label>
     <label class="tog" id="repolab"><span class="k">Repo</span> <select id="repo"><option value="">All repos</option></select></label>
     <label class="tog" id="kindlab"><span class="k">Type</span> <select id="kind"><option value="">All types</option><option value="master">Master</option><option value="plan">Plan</option></select></label>
     <label class="tog filt" id="statuslab"><span class="k">Show</span> <select id="status">
@@ -166,6 +183,9 @@ main{padding:.5rem .75rem}
   </div>
   <div id="pillbar" role="group" aria-label="Filters"></div>
   <nav id="drawer" aria-label="Repos and settings" hidden>
+    <div class="dhead">View</div>
+    <div id="dviews"></div>
+    <div class="dsep"></div>
     <div class="dhead">Repo</div>
     <div id="drepos"></div>
     <div class="dsep"></div>
@@ -181,13 +201,15 @@ main{padding:.5rem .75rem}
     <div class="countrow"><span id="counts"></span><span id="flightn" class="mono"></span></div>
     <div id="chips"></div>
     <div id="banner" class="banner" hidden><span id="bmsg"></span><button id="retry" type="button">Retry</button></div>
+    <div id="note" class="note" hidden>Git history is unavailable, so only step start and finish times are shown.</div>
   </div>
   <div id="list"></div>
+  <div id="activity" hidden></div>
 </main>
 <script>
 (function(){
 'use strict';
-var ST_KEY='plans.status',RP_KEY='plans.repo',TH_KEY='plans.theme';
+var ST_KEY='plans.status',RP_KEY='plans.repo',TH_KEY='plans.theme',VIEW_KEY='plans.view';
 var STATUSES=["all","open","started","notstarted","completed"];
 var KINDS=["master","plan"];
 var DONE_WORDS=['done','merged','moved'];
@@ -256,24 +278,29 @@ var repoFilter=store(RP_KEY)||'';
 statusEl.value=statusFilter;
 var STATUS_LABELS=[['all','All'],['open','Open'],['started','Started'],['notstarted','Not started'],['completed','Completed']];
 var KIND_LABELS=[['master','Master'],['plan','Plan']];
+var VIEW_LABELS=[['plans','Plans'],['activity','Activity']];
+var view=store(VIEW_KEY)==='activity'?'activity':'plans';
+function fpill(pid,text,pressed,fn){
+  var b=el('button','fpill',text);
+  b.type='button';
+  b.setAttribute('aria-pressed',pressed?'true':'false');
+  b.dataset.pid=pid;
+  b.addEventListener('click',fn);
+  return b;
+}
+function sepEl(){var s=el('span','sep');s.setAttribute('aria-hidden','true');return s}
 function paintPillbar(){
-  var bar=$('pillbar');
-  var kids=STATUS_LABELS.map(function(it){
-    var b=el('button','fpill',it[1]);
-    b.type='button';
-    b.setAttribute('aria-pressed',statusFilter===it[0]?'true':'false');
-    b.addEventListener('click',function(){setStatus(it[0])});
-    return b;
-  });
-  kids.push(el('span','sep'));
-  KIND_LABELS.forEach(function(it){
-    var b=el('button','fpill',it[1]);
-    b.type='button';
-    b.setAttribute('aria-pressed',kindFilter===it[0]?'true':'false');
-    b.addEventListener('click',function(){setKind(kindFilter===it[0]?'':it[0])});
-    kids.push(b);
-  });
+  var bar=$('pillbar'),ae=document.activeElement;
+  var fid=ae&&ae.dataset&&bar.contains(ae)?ae.dataset.pid:null;
+  var kids=VIEW_LABELS.map(function(it){return fpill('view:'+it[0],it[1],view===it[0],function(){setView(it[0])})});
+  kids.push(sepEl());
+  if(view==='plans'){
+    STATUS_LABELS.forEach(function(it){kids.push(fpill('status:'+it[0],it[1],statusFilter===it[0],function(){setStatus(it[0])}))});
+    kids.push(sepEl());
+  }
+  KIND_LABELS.forEach(function(it){kids.push(fpill('kind:'+it[0],it[1],kindFilter===it[0],function(){setKind(kindFilter===it[0]?'':it[0])}))});
   bar.replaceChildren.apply(bar,kids);
+  if(fid){var f=bar.querySelector('[data-pid="'+fid+'"]');if(f){f.focus()}}
 }
 function paintFilter(){$('statuslab').classList.toggle('on',statusFilter!=='all');paintPillbar()}
 paintFilter();
@@ -294,42 +321,99 @@ function matchKind(p){
   if(kindFilter==='master'){return p.kind==='master'||p.kind==='orchestrator'}
   return p.kind===kindFilter;
 }
-function setKind(v){
+function setKind(v,fromDrawer){
   kindFilter=v;kindEl.value=v;save("plans.kind",v);paintKindUi();
-  setDrawer(false,false);
-  loadList('toggle');
+  setDrawer(false,!!fromDrawer);
+  applyView();
+}
+function wide(){return !!(window.matchMedia&&window.matchMedia('(min-width:641px)').matches)}
+function focusOwner(sel){(wide()?sel:menuBtn).focus()}
+/* Plans keeps its loader path; Activity re-filters the cached events with no refetch. */
+function applyView(){
+  if(view==='activity'){actShown=ACT_PAGE;syncRepoOptions();renderActivity()}else{loadList('toggle')}
+}
+function setRepo(v){
+  repoFilter=v;save(RP_KEY,v);repoEl.value=v;
+  paintKindUi();syncRepoOptions();
+  applyView();
+}
+function viewLoader(v){return v==='activity'?loadActivity:loadList}
+/* Switching views paints the destination from its cache and fetches only when it never loaded or last failed. */
+function setView(v,fromDrawer){
+  v=v==='activity'?'activity':'plans';
+  view=v;save(VIEW_KEY,v);
+  paintView();
+  if(fromDrawer){setDrawer(false,true)}
+  var s=viewState[v];
+  if((!s.ok||s.err)&&!s.pending){viewLoader(v)('switch')}
+}
+function paintView(){
+  var act=view==='activity';
+  viewEl.value=view;$('viewlab').classList.toggle('on',act);
+  $('statuslab').hidden=act;
+  listEl.hidden=act;activityEl.hidden=!act;
+  $('flightn').hidden=act;
+  noteEl.hidden=true;
+  syncRepoOptions();
+  paintKindUi();
+  paintStamp();
+  paintBanner();
+  if(act){renderActivity()}else{chipsEl.hidden=false;paintPlansCounts()}
 }
 function setStatus(v){
   statusFilter=v;statusEl.value=v;paintFilter();save(ST_KEY,v);
   loadList('toggle');
 }
 kindEl.addEventListener('change',function(){setKind(kindEl.value)});
-var chipsKey=null;
+var chipsKey=null,dviews=$('dviews');
+function chipNodes(){
+  var kids=[];
+  if(kindFilter){
+    var c=el('button','chip','Type: '+kindFilter+' ×');
+    c.type='button';
+    c.setAttribute('aria-label','Clear type filter: '+kindFilter);
+    c.addEventListener('click',function(){setKind('');focusOwner(kindEl)});
+    kids.push(c);
+  }
+  if(repoFilter){
+    var r=el('button','chip','Repo: '+repoFilter+' ×');
+    r.type='button';
+    r.setAttribute('aria-label','Clear repo filter: '+repoFilter);
+    r.addEventListener('click',function(){setRepo('');focusOwner(repoEl)});
+    kids.push(r);
+  }
+  return kids;
+}
 function paintKindUi(){
-  var key=kindFilter;
+  var key=view+'|'+kindFilter+'|'+repoFilter;
   if(chipsKey!==key){
     chipsKey=key;paintPillbar();
-    var kids=[];
-    if(kindFilter){
-      var c=el('button','chip','Type: '+kindFilter+' ×');
-      c.type='button';
-      c.setAttribute('aria-label','Clear type filter: '+kindFilter);
-      c.addEventListener('click',function(){setKind('')});
-      kids.push(c);
-    }
-    chipsEl.replaceChildren.apply(chipsEl,kids);
+    chipsEl.replaceChildren.apply(chipsEl,chipNodes());
+    dviews.replaceChildren.apply(dviews,VIEW_LABELS.map(function(it){
+      var b=el('button','item',it[1]);
+      b.type='button';
+      b.setAttribute('aria-current',it[0]===view?'true':'false');
+      b.addEventListener('click',function(){setView(it[0],true)});
+      return b;
+    }));
     var items=[['','All types']].concat(KINDS.map(function(k){return [k,k]}));
     dkinds.replaceChildren.apply(dkinds,items.map(function(it){
       var b=el('button','item',it[1]);
       b.type='button';
       b.setAttribute('aria-current',it[0]===kindFilter?'true':'false');
-      b.addEventListener('click',function(){setKind(it[0])});
+      b.addEventListener('click',function(){setKind(it[0],true)});
       return b;
     }));
   }
 }
-paintKindUi();
 var firstLoadDone=false;
+var viewState={plans:{ok:false,err:null,pending:false},activity:{ok:false,err:null,pending:false}};
+var plansRepos=[],activityRepos=[];
+var plansCountsText='',plansFlightText='';
+var stamps={plans:'',activity:''};
+var activityEl=$('activity'),noteEl=$('note'),viewEl=$('view');
+viewEl.value=view;
+paintKindUi();
 var listSeq=0,listCtl=null;
 var gen=0;
 var detailCache=new Map();
@@ -361,13 +445,20 @@ async function fetchJson(url,signal){
 function errText(e){return e instanceof ApiError?e.message:'Unexpected error.'}
 
 /* ---------- banner / status ---------- */
-function showBanner(msg){bmsgEl.textContent='Could not load plans. '+msg;bannerEl.hidden=false}
-function hideBanner(){bannerEl.hidden=true}
-function two(n){return (n<10?'0':'')+n}
-function stampUpdated(){
-  var d=new Date(),t='Last updated '+two(d.getHours())+':'+two(d.getMinutes());
-  updatedEl.textContent=t;$('updated2').textContent=t;
+var BANNER_PREFIX={plans:'Could not load plans. ',activity:'Could not load activity. '};
+/* Shows the active view's remembered failure (or hides the banner); retry calls that view's loader. */
+function paintBanner(){
+  var e=viewState[view].err;
+  if(e){bmsgEl.textContent=BANNER_PREFIX[view]+e;bannerEl.hidden=false}else{bannerEl.hidden=true}
 }
+function two(n){return (n<10?'0':'')+n}
+function paintStamp(){updatedEl.textContent=stamps[view];$('updated2').textContent=stamps[view]}
+function stampUpdated(v){
+  var d=new Date();
+  stamps[v]='Last updated '+two(d.getHours())+':'+two(d.getMinutes());
+  if(view===v){paintStamp()}
+}
+function paintPlansCounts(){countsEl.textContent=plansCountsText;$('flightn').textContent=plansFlightText}
 
 /* ---------- cards ---------- */
 function isHttps(u){return typeof u==='string'&&u.startsWith('https://')}
@@ -747,9 +838,14 @@ function cardsFor(plans,section,wantCompleted,seen){
   });
   return out;
 }
-function syncRepoOptions(repos){
-  var names=repos.map(function(r){return r.repo});
-  if(repoFilter&&names.indexOf(repoFilter)<0){repoFilter='';save(RP_KEY,'')}
+/* Repo options: Activity offers the union of plan repos and event repos, Plans only plan repos. The stored
+   filter stays listed until both relevant loaders succeeded and it is absent (a failed fetch is unknown, not empty). */
+function syncRepoOptions(){
+  var names=plansRepos.slice();
+  if(view==='activity'){activityRepos.forEach(function(n){if(names.indexOf(n)<0){names.push(n)}})}
+  var resolved=view==='activity'?(viewState.plans.ok&&viewState.activity.ok):viewState.plans.ok;
+  if(repoFilter&&resolved&&names.indexOf(repoFilter)<0){repoFilter='';save(RP_KEY,'');paintKindUi()}
+  if(repoFilter&&names.indexOf(repoFilter)<0){names.push(repoFilter)}
   var cur=Array.prototype.slice.call(repoEl.options,1).map(function(o){return o.value});
   if(cur.join('|')!==names.join('|')){
     while(repoEl.options.length>1){repoEl.remove(1)}
@@ -758,7 +854,7 @@ function syncRepoOptions(repos){
     });
   }
   repoEl.value=repoFilter;
-  $('ttl').textContent='Plans'+(repoFilter?' · '+repoFilter:'');
+  $('ttl').textContent=(view==='activity'?'Activity':'Plans')+(repoFilter?' · '+repoFilter:'');
   var dkey=names.join('|')+'#'+repoFilter;
   if(drawerKey!==dkey){
     drawerKey=dkey;
@@ -783,9 +879,8 @@ function setDrawer(open,focusBack){
   }else if(focusBack){menuBtn.focus()}
 }
 function chooseRepo(v){
-  repoFilter=v;save(RP_KEY,v);
+  setRepo(v);
   setDrawer(false,true);
-  loadList('toggle');
 }
 menuBtn.addEventListener('click',function(){setDrawer(drawerEl.hidden,false)});
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!drawerEl.hidden){setDrawer(false,true)}});
@@ -886,7 +981,9 @@ function render(data){
   var seen=new Set(),seenRepos=new Set();
   var nodes=[];
   var shown=0;
-  syncRepoOptions(data.repos);
+  plansRepos=data.repos.map(function(r){return r.repo});
+  viewState.plans.ok=true;
+  syncRepoOptions();
   var cnt=new Map();
   data.repos.forEach(function(r){r.plans.forEach(function(p){var k=p.repo+'|'+baseLabel(p);cnt.set(k,(cnt.get(k)||0)+1)})});
   dupSet=new Set();
@@ -930,51 +1027,242 @@ function render(data){
     nodes.push(emptyAllEl);
   }
   syncChildren(listEl,nodes);
-  countsEl.textContent=shown+(shown===1?' plan':' plans')+(repoFilter?' · '+repoFilter:'');
+  plansCountsText=shown+(shown===1?' plan':' plans')+(repoFilter?' · '+repoFilter:'');
   var flying=0;
   data.repos.forEach(function(r){
     if(repoFilter&&r.repo!==repoFilter){return}
     r.plans.forEach(function(p){if(p.state!=='completed'&&p.done>0&&!p.master_open&&matchKind(p)){flying++}});
   });
-  $('flightn').textContent=flying+' in flight';
+  plansFlightText=flying+' in flight';
+  if(view==='plans'){paintPlansCounts()}
 }
 
 async function loadList(trigger){
   if(listCtl){listCtl.abort()}
   var ctl=new AbortController();listCtl=ctl;
-  var id=++listSeq,want=needsCompleted();
+  var id=++listSeq,want=needsCompleted(),vs=viewState.plans;
+  vs.pending=true;
   listEl.setAttribute('aria-busy','true');
   if(!firstLoadDone){syncChildren(listEl,[loadingEl])}
+  function fail(msg){
+    vs.err=msg;vs.pending=false;
+    if(!firstLoadDone){syncChildren(listEl,[])}
+    listEl.removeAttribute('aria-busy');
+    if(view==='plans'){paintBanner()}
+  }
   var data;
   try{
     data=await fetchJson('/api/plans'+(want?'?completed=1':''),ctl.signal);
     if(!data||!Array.isArray(data.repos)){throw new ApiError('The response was not a plan list.')}
   }catch(e){
     if(ctl.signal.aborted||id!==listSeq){return}
-    showBanner(errText(e));
-    if(!firstLoadDone){syncChildren(listEl,[])}
-    listEl.removeAttribute('aria-busy');
+    fail(errText(e));
     return;
   }
   if(id!==listSeq){return}
   var active=document.activeElement;
-  var moveFocus=trigger==='retry'&&(active===retryBtn||active===document.body||!active);
+  var moveFocus=trigger==='retry'&&view==='plans'&&(active===retryBtn||active===document.body||!active);
+  var repoBefore=repoFilter;
   try{
     render(data);
   }catch(e){
-    showBanner('The plan list could not be displayed.');
-    if(!firstLoadDone){syncChildren(listEl,[])}
-    listEl.removeAttribute('aria-busy');
+    fail('The plan list could not be displayed.');
     return;
   }
-  hideBanner();
+  vs.err=null;vs.pending=false;
+  if(view==='plans'){paintBanner()}
   firstLoadDone=true;
-  stampUpdated();
+  stampUpdated('plans');
+  if(view==='activity'&&repoFilter!==repoBefore){renderActivity()}
   gen++;
   detailCache.clear();
   cards.forEach(function(rec){if(rec.open){loadDetail(rec,'refresh')}});
   listEl.removeAttribute('aria-busy');
   if(moveFocus){refreshBtn.focus()}
+}
+
+/* ---------- activity ---------- */
+var ACT_PAGE=150;
+var KIND_UI={
+  'created':['Created','p-master'],'implementation-started':['Implementation began','p-master'],'subplan-started':['Sub-plan started','p-master'],
+  'step-started':['Step started','p-open'],'review':['Review added','p-open'],
+  'step-done':['Step done','p-done'],'subplan-done':['Sub-plan done','p-done'],'completed':['Plan completed','p-done'],
+  'edited':['Edited','p-edit'],'progress':['Progress','p-edit'],'artifact':['Artifact added','p-edit'],'reopened':['Reopened','p-edit']
+};
+var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var activityData=null,actHistory='ok',actShown=ACT_PAGE,actCollapsed=new Set(),actSeq=0,actCtl=null;
+var actLoadingEl=el('div','empty','Loading activity…');
+actLoadingEl.setAttribute('aria-busy','true');
+function evEpoch(ev){return typeof ev.epoch==='number'?ev.epoch:Date.parse(ev.ts)/1000}
+function dayKey(ev){var d=new Date(evEpoch(ev)*1000);return d.getFullYear()+'-'+two(d.getMonth()+1)+'-'+two(d.getDate())}
+function dayLabel(ev){
+  var d=new Date(evEpoch(ev)*1000),now=new Date(),yest=new Date(now.getFullYear(),now.getMonth(),now.getDate()-1);
+  var k=dayKey(ev),text=DOW[d.getDay()]+' '+MON[d.getMonth()]+' '+d.getDate()+(d.getFullYear()!==now.getFullYear()?' '+d.getFullYear():'');
+  if(k===dayKey({epoch:now.getTime()/1000})){return 'Today · '+text}
+  if(k===dayKey({epoch:yest.getTime()/1000})){return 'Yesterday · '+text}
+  return text;
+}
+function plural(n,w){return n+' '+w+(n===1?'':'s')}
+function matchEvent(ev){
+  if(repoFilter&&ev.repo!==repoFilter){return false}
+  if(!kindFilter){return true}
+  if(kindFilter==='master'){return ev.plan_kind==='master'||ev.plan_kind==='orchestrator'}
+  return ev.plan_kind===kindFilter;
+}
+function evMarker(ev){
+  if(ev.kind==='completed'){return ['now completed',true]}
+  if(ev.kind==='reopened'){return ['now open',false]}
+  if(ev.state==='open'){return ['was open',false]}
+  if(ev.state==='completed'){return ['already completed',true]}
+  return ['state unknown',false];
+}
+function evRow(ev){
+  var li=el('li','ev'),d=new Date(evEpoch(ev)*1000);
+  var t=el('time',null,two(d.getHours())+':'+two(d.getMinutes()));
+  if(ev.ts){t.setAttribute('datetime',String(ev.ts))}
+  li.appendChild(t);
+  var top=el('div','ev-top'),ui=KIND_UI[ev.kind]||[String(ev.kind),'p-edit'];
+  top.appendChild(el('span','pill '+ui[1],ui[0]));
+  var title=ev.title||ev.name||ev.topic||'';
+  if(ev.plan_kind==='master'||ev.plan_kind==='orchestrator'){title+=' ('+ev.plan_kind+')'}
+  top.appendChild(el('span','ev-title',title));
+  li.appendChild(top);
+  var step=null;
+  if(typeof ev.step==='number'){step='Step '+ev.step+(ev.step_title?' · '+ev.step_title:'')}
+  else if(ev.detail){step=String(ev.detail).charAt(0).toUpperCase()+String(ev.detail).slice(1)}
+  if(step){li.appendChild(el('div','ev-step',step))}
+  var meta=el('div','ev-meta'),mk=evMarker(ev);
+  meta.appendChild(el('span',null,ev.repo+' · '+ev.topic));
+  meta.appendChild(el('span','was'+(mk[1]?' was-done':''),mk[0]));
+  li.appendChild(meta);
+  return li;
+}
+function actFocusKey(){
+  var a=document.activeElement;
+  if(!a||!activityEl.contains(a)){return null}
+  if(a.classList.contains('showolder')){return 'showolder'}
+  if(a.dataset&&a.dataset.day){return 'day:'+a.dataset.day}
+  return null;
+}
+function dayGroups(list){
+  var days=[],cur=null;
+  list.forEach(function(ev,i){
+    var k=dayKey(ev);
+    if(!cur||cur.key!==k){cur={key:k,start:i,items:[]};days.push(cur)}
+    cur.items.push(ev);
+  });
+  return days;
+}
+function renderActivity(opts){
+  if(view!=='activity'){return}
+  opts=opts||{};
+  var fk=actFocusKey(),sy=window.scrollY,nodes=[],text='',filteredEmpty=false,events=activityData;
+  noteEl.hidden=!(events&&actHistory==='unavailable');
+  if(!events){
+    if(viewState.activity.pending){nodes.push(actLoadingEl)}
+  }else if(!events.length){
+    nodes.push(el('div','empty',actHistory==='unavailable'?'No step start or finish times found yet.':'No activity yet. Events appear here as plans are created, worked on and completed.'));
+    text='0 events';
+  }else{
+    var list=events.filter(matchEvent);
+    if(!list.length){
+      filteredEmpty=true;
+      var box=el('div');
+      box.appendChild(el('p','empty','No activity matches this filter.'));
+      chipNodes().forEach(function(c){box.appendChild(c)});
+      nodes.push(box);
+      text='0 of '+events.length+' events';
+    }else{
+      var n=Math.min(Math.max(actShown,ACT_PAGE),list.length);
+      while(n<list.length&&dayKey(list[n])===dayKey(list[n-1])){n++}
+      actShown=n;
+      var days=dayGroups(list),shownDays=days.filter(function(g){return g.start<n});
+      shownDays.forEach(function(g){
+        var sec=el('section'),h=el('h2'),b=el('button','sechead'),ul=el('ul','evs'),chev=el('span','chev');
+        ul.id='act-'+g.key;
+        b.type='button';b.dataset.day=g.key;b.setAttribute('aria-controls',ul.id);
+        chev.setAttribute('aria-hidden','true');
+        b.appendChild(chev);b.appendChild(el('span',null,dayLabel(g.items[0])));
+        h.appendChild(b);h.appendChild(el('span','mono',plural(g.items.length,'event')));
+        g.items.forEach(function(ev){ul.appendChild(evRow(ev))});
+        sec.appendChild(h);sec.appendChild(ul);
+        function paint(){var c=actCollapsed.has(g.key);sec.classList.toggle('collapsed',c);b.setAttribute('aria-expanded',c?'false':'true')}
+        b.addEventListener('click',function(){
+          if(actCollapsed.has(g.key)){actCollapsed.delete(g.key)}else{actCollapsed.add(g.key)}
+          paint();
+        });
+        paint();
+        nodes.push(sec);
+      });
+      if(n<list.length){
+        var firstNew=days[shownDays.length].key,rest=days.length-shownDays.length;
+        var more=el('button','showolder','Show older · '+plural(list.length-n,'more event')+' across '+plural(rest,'day'));
+        more.type='button';
+        more.addEventListener('click',function(){actShown=n+ACT_PAGE;renderActivity({focusDay:firstNew})});
+        nodes.push(more);
+        text='Showing '+n+' of '+plural(list.length,'event')+' · '+plural(days.length,'day');
+      }else if(repoFilter||kindFilter){
+        text=list.length+' of '+plural(events.length,'event');
+      }else{
+        text=plural(list.length,'event')+' · '+plural(days.length,'day');
+      }
+    }
+  }
+  chipsEl.hidden=filteredEmpty;
+  countsEl.textContent=text;
+  activityEl.replaceChildren.apply(activityEl,nodes);
+  var f=null;
+  if(opts.focusDay){f=activityEl.querySelector('button[data-day="'+opts.focusDay+'"]')}
+  else if(fk){
+    var a=document.activeElement;
+    if(!a||a===document.body||!document.body.contains(a)){
+      f=fk==='showolder'?activityEl.querySelector('button.showolder'):activityEl.querySelector('button[data-day="'+fk.slice(4)+'"]');
+    }
+  }
+  if(f){f.focus()}
+  if(!opts.focusDay&&Math.abs(window.scrollY-sy)>1){window.scrollTo(0,sy)}
+}
+async function loadActivity(trigger){
+  if(actCtl){actCtl.abort()}
+  var ctl=new AbortController();actCtl=ctl;
+  var id=++actSeq,vs=viewState.activity;
+  vs.pending=true;
+  if(view==='activity'){
+    activityEl.setAttribute('aria-busy','true');
+    if(activityData){activityEl.classList.add('stale')}else{renderActivity()}
+  }
+  function fail(msg){
+    vs.err=msg;vs.pending=false;
+    activityEl.removeAttribute('aria-busy');activityEl.classList.remove('stale');
+    if(view==='activity'){paintBanner();if(!activityData){renderActivity()}}
+  }
+  var data;
+  try{
+    data=await fetchJson('/api/activity',ctl.signal);
+    if(!data||!Array.isArray(data.events)){throw new ApiError('The response was not an activity feed.')}
+  }catch(e){
+    if(ctl.signal.aborted||id!==actSeq){return}
+    fail(errText(e));
+    return;
+  }
+  if(id!==actSeq){return}
+  var active=document.activeElement;
+  var moveFocus=trigger==='retry'&&view==='activity'&&(active===retryBtn||active===document.body||!active);
+  activityData=data.events;
+  actHistory=data.history==='unavailable'?'unavailable':'ok';
+  var seen=new Set();
+  activityData.forEach(function(ev){if(ev&&typeof ev.repo==='string'){seen.add(ev.repo)}});
+  activityRepos=Array.from(seen).sort();
+  vs.ok=true;vs.err=null;vs.pending=false;
+  activityEl.removeAttribute('aria-busy');activityEl.classList.remove('stale');
+  syncRepoOptions();
+  stampUpdated('activity');
+  if(view==='activity'){
+    paintBanner();
+    try{renderActivity()}catch(e){fail('The activity feed could not be displayed.');return}
+    if(moveFocus){refreshBtn.focus()}
+  }
 }
 
 /* ---------- wiring ---------- */
@@ -984,14 +1272,13 @@ statusEl.addEventListener('change',function(){
   save(ST_KEY,statusFilter);
   loadList('toggle');
 });
-repoEl.addEventListener('change',function(){
-  repoFilter=repoEl.value;
-  save(RP_KEY,repoFilter);
-  loadList('toggle');
-});
-refreshBtn.addEventListener('click',function(){loadList('refresh')});
-retryBtn.addEventListener('click',function(){loadList('retry')});
+repoEl.addEventListener('change',function(){setRepo(repoEl.value)});
+viewEl.addEventListener('change',function(){setView(viewEl.value)});
+refreshBtn.addEventListener('click',function(){viewLoader(view)('refresh')});
+retryBtn.addEventListener('click',function(){viewLoader(view)('retry')});
 loadList('first');
+loadActivity('first');
+paintView();
 })();
 </script>
 </body>

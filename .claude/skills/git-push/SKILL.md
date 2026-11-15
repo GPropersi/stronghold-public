@@ -674,7 +674,7 @@ Right after the PR is created or updated, record its URL in the plan so the plan
 ~/code/.claude/scripts/plan-pr-link.sh add <plan-file> <PR_URL>
 ```
 
-It adds the URL to the plan's `pr_urls:` frontmatter key. Exit 3 (no frontmatter) or 2 (not a GitHub PR URL) is a warning to report, never a reason to stop the push. Skip when the PR has no plan (Step 2d no-plan PRs). Step 10's stronghold sync carries the plan edit.
+It adds the URL to the plan's `pr_urls:` frontmatter key. Exit 3 (no frontmatter), 2 (not a GitHub PR URL) or 6 (plan file locked or unwritable; non-fatal, rerun the command) is a warning to report, never a reason to stop the push. Skip when the PR has no plan (Step 2d no-plan PRs). Step 10's stronghold sync carries the plan edit.
 
 #### After PR Creation
 

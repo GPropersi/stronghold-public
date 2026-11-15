@@ -10,6 +10,9 @@ are held and reported separately). Fail closed: every path that is read must res
 plans_dir; names the detail URL could not address are skipped; internal frontmatter keys
 (github_issue_node_id, worktree) are never emitted.
 
+GET /api/activity serves plan_activity.build_feed (newest-first timeline; no query string accepted; the only
+git use is plan_activity's fixed-argv read-only `git log`, single-flight, 20 s deadline, failures negative-cached).
+
 The second half is the read-only HTTP layer (make_server / main): GET and HEAD only, Host allowlist
 (DNS-rebinding defence), loopback bind by default, JSON error bodies, no-store headers.
 """
@@ -23,28 +26,26 @@ import os
 import re
 import socket
 import sys
+import traceback
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import parse_qs, unquote
 
-import plan_backfill
+import plan_activity
 import plan_lifecycle
+import plan_naming
 import plan_parse
 import plan_pr_link
 
-SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 STATES = plan_parse.STATES
-NON_PLAN_TYPES = plan_backfill.NON_PLAN_TYPES
 NON_BRANCHES = plan_lifecycle.NON_BRANCHES
-MASTER_KINDS = ("master", "orchestrator")
-SUFFIX_INFERRED = ("-design", "-progress", "-master")
 DONE_WORDS = ("done", "merged", "moved")
-
-
-def _valid_segment(value: str) -> bool:
-    return bool(SEGMENT_RE.fullmatch(value)) and value not in (".", "..")
+MASTER_KINDS = plan_naming.MASTER_KINDS
+_valid_segment = plan_naming.valid_segment
+_title = plan_naming.title
+_kind = plan_naming.kind
 
 
 def _inside(path: Path, root: Path) -> bool:
@@ -85,23 +86,6 @@ def _read_lines(path: Path) -> list[str]:
         return path.read_text().splitlines()
     except (OSError, UnicodeDecodeError):
         return []
-
-
-def _title(lines: list[str], name: str) -> str:
-    """First H1 outside fenced code blocks (and outside frontmatter), else the file stem."""
-    fence: str | None = None
-    for line in lines[plan_parse._split_frontmatter(lines)[1] :]:
-        fenced = plan_parse.FENCE_RE.match(line)
-        if fence is not None:
-            if fenced and fenced.group(1)[0] == fence[0] and len(fenced.group(1)) >= len(fence):
-                fence = None
-            continue
-        if fenced:
-            fence = fenced.group(1)
-            continue
-        if line.startswith("# ") and line[2:].strip():
-            return line[2:].strip()
-    return name
 
 
 BLURB_MAX = 240
@@ -164,21 +148,6 @@ def _prs(raw: str | None, done_raw: str | None = None) -> list[dict]:
         if len(out) == PRS_MAX:
             break
     return out
-
-
-def _kind(path: Path, doc: plan_parse.PlanDoc, lines: list[str]) -> str | None:
-    """'plan' | 'master' | 'orchestrator', or None when the file is a filtered non-plan."""
-    if doc.type in NON_PLAN_TYPES:
-        return None
-    if doc.type in MASTER_KINDS:
-        return doc.type
-    if doc.type is None and path.stem.lower().endswith(SUFFIX_INFERRED):
-        inferred = plan_backfill.infer_type(path, lines)
-        if inferred in NON_PLAN_TYPES:
-            return None
-        if inferred in MASTER_KINDS:
-            return inferred
-    return "plan"
 
 
 def _boxes(doc: plan_parse.PlanDoc) -> list[plan_parse.Box]:
@@ -307,7 +276,7 @@ def _build(path: Path, root: Path, repo: str, state: str, topic: str, name: str)
         "name": name,
         "kind": kind,
         "title": _title(lines, name),
-        "short_title": (doc.frontmatter.get("short_title") or "").strip().strip("\"'") or None,
+        "short_title": plan_naming.short_title(doc),
         "prs": _prs(doc.frontmatter.get("pr_urls"), doc.frontmatter.get("pr_done")),
         "about":(doc.frontmatter.get("short_summary") or "").strip().strip("\"'") or _blurb(lines),
         "branch": doc.frontmatter.get("branch") or None,
@@ -512,9 +481,14 @@ def handle_get(plans_dir: Path, page_path: Path, target: str) -> Response:
         if path == "/api/plans":
             include_completed = parse_qs(query).get("completed") == ["1"]
             return _json_response(list_plans(plans_dir, include_completed))
+        if path == "/api/activity":
+            if query:
+                return error_response(400, "bad query")
+            return _json_response(plan_activity.build_feed(plans_dir))
         if path.startswith(DETAIL_PREFIX):
             return _detail_response(plans_dir, path[len(DETAIL_PREFIX) :])
     except Exception:  # noqa: BLE001 - never leak a traceback to the client
+        print(f"plans_ui: GET {path} failed:\n{traceback.format_exc()}", file=sys.stderr)
         return error_response(500, "internal error")
     return error_response(404, "not found")
 

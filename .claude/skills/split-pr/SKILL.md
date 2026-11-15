@@ -454,8 +454,8 @@ does not persist in a subagent.
   `references/graphql/*.graphql` — never re-author that GraphQL inline. §5.
 - **5d′. Link the part's PR to the plan** (so the plans dashboard shows every part before it merges): once the PR is
   open, run `~/code/.claude/scripts/plan-pr-link.sh add <plan-file> <part-PR-URL>` with the plan file resolved in 1a
-  (idempotent; skip for the unrelated-changes part and when the branch has no plan; exit 2/3 is a warning to report,
-  not a stop). 5i's sync carries the edit.
+  (idempotent; skip for the unrelated-changes part and when the branch has no plan; exit 2/3/6 is a warning to report,
+  not a stop; exit 6 = plan file locked, non-fatal, rerun the command). 5i's sync carries the edit.
 - **5e. Issue wiring:** only the **last** part in merge order carries `Closes #<issue>`; every earlier
   part carries `Part of #<issue>`; the unrelated-changes part gets its **own** issue, since it is not
   part of the original work. The trap: `/git-push` appends `Closes` automatically, so reused naively all
@@ -514,7 +514,7 @@ resolves its target from the Bash cwd, which does **not** persist in a subagent;
   `finished: true`, and drop a `worktree:` frontmatter key whose worktree `make wt-rm` removed. Then
   **update the master plan** if the plan is a phase of one: run `make plan-reconcile REPO=<repo> MERGED=1`
   (it ticks the step's boxes and writes `merged — PRs #A–#B (date, sha)`; a plan not yet `finished: true`
-  is skipped). Fall back to disposition §3's manual `**Status:**` edit only if it cannot (also fix a stale
+  is skipped; exit 6 = a plan file was locked and skipped: non-fatal, rerun is safe). Fall back to disposition §3's manual `**Status:**` edit only if it cannot (also fix a stale
   `**Status:**` on an earlier phase this one `Depends on` only if its merge is verifiable). Finally
   **sync** via 1g's five-call sequence. §3-§4.
 - **6d. Warn about the one-PR assumptions** when handing back: parts go strictly **one at a time** (one

@@ -11,7 +11,7 @@ or CLOSED PRs to the `pr_done:` frontmatter key (space-separated). Idempotent. A
 read (no matching checkout, gh failure, timeout) is logged to stderr and left as in review.
 --mark records one PR whose state the caller already read (pr-state.sh, on a MERGED/CLOSED verdict) in every
 plan listing it, with no GitHub call.
-Exit: 0 ok | 2 usage.
+Exit: 0 ok | 2 usage | 6 a plan file was locked or unwritable and skipped (non-fatal, rerun is safe).
 """
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
+import plan_mark
 import plan_pr_link
 
 DONE_KEY = "pr_done"
@@ -78,29 +78,32 @@ def pr_state(url: str, cwd: Path) -> str | None:
     return out.stdout.strip() or None
 
 
-def write_done(path: Path, lines: list[str], done: list[str]) -> None:
-    idx, _ = frontmatter_values(lines, DONE_KEY)
-    if idx is not None:
-        lines[idx] = f"{DONE_KEY}: " + " ".join(done)
-    else:
-        urls_idx, _ = frontmatter_values(lines, plan_pr_link.KEY)
-        assert urls_idx is not None
-        lines.insert(urls_idx + 1, f"{DONE_KEY}: " + " ".join(done))
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".plan-pr-sync-")
-    try:
-        with os.fdopen(fd, "w") as handle:
-            handle.write("\n".join(lines))
-        os.chmod(tmp, path.stat().st_mode & 0o777)
-        os.replace(tmp, path)
-    except BaseException:
-        os.unlink(tmp)
-        raise
+def write_done(path: Path, additions: list[str]) -> bool:
+    """Add `additions` to the `pr_done:` key, deriving the line from the text re-read inside the plan-mark lock."""
+
+    def rewrite(text: str) -> str | None:
+        lines = text.split("\n")
+        idx, current = frontmatter_values(lines, DONE_KEY)
+        done = current + [url for url in additions if url not in current]
+        if done == current:
+            return None
+        if idx is not None:
+            lines[idx] = f"{DONE_KEY}: " + " ".join(done)
+        else:
+            urls_idx, _ = frontmatter_values(lines, plan_pr_link.KEY)
+            if urls_idx is None:
+                return None
+            lines.insert(urls_idx + 1, f"{DONE_KEY}: " + " ".join(done))
+        return "\n".join(lines)
+
+    return plan_mark.locked_rewrite(path, rewrite)
 
 
 def sync(plans_dir: Path, dry_run: bool, mark: tuple[str, str] | None = None) -> int:
     repos = {} if mark else checkouts()
     seen: dict[str, str | None] = {}
     changed = 0
+    locked = 0
     for path in sorted(plans_dir.glob("*/*/*/*.md")):
         try:
             lines = path.read_text().split("\n")
@@ -130,11 +133,19 @@ def sync(plans_dir: Path, dry_run: bool, mark: tuple[str, str] | None = None) ->
             if state in STATES_DONE:
                 new.append(url)
         if new != done:
-            changed += 1
-            if not dry_run:
-                write_done(path, lines, new)
+            if dry_run:
+                changed += 1
+                continue
+            try:
+                if write_done(path, [url for url in new if url not in done]):
+                    changed += 1
+            except plan_mark.LockError as exc:
+                print(f"plan-pr-sync: {path}: locked or unwritable, skipped ({exc})", file=sys.stderr)
+                locked += 1
+            except FileNotFoundError:
+                print(f"plan-pr-sync: {path}: vanished before the locked re-read; skipped", file=sys.stderr)
     print(f"plan-pr-sync: {changed} plan(s) {'would change' if dry_run else 'updated'}")
-    return 0
+    return 6 if locked else 0
 
 
 def main(argv: list[str]) -> int:

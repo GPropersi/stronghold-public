@@ -21,11 +21,11 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
-import tempfile
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import plan_mark
 import plan_parse
 import wf_lint_base as base
 
@@ -464,18 +464,28 @@ class Backfill:
             return None
         return "untracked" if out.startswith("??") else "dirty"
 
-    def write(self, doc: Doc) -> None:
-        text = doc.text()
-        handle, temp = tempfile.mkstemp(dir=doc.path.parent, prefix=".backfill-", suffix=".tmp")
-        try:
-            with os.fdopen(handle, "w", encoding="utf-8") as out:
-                out.write(text)
-            shutil.copymode(doc.path, temp)
-            os.replace(temp, doc.path)
-        except OSError:
-            if os.path.exists(temp):
-                os.unlink(temp)
-            raise
+    def write(self, doc: Doc) -> set[str] | None:
+        """Write through the plan-mark lock on the re-read text, re-running only the first pass's rules on a fresh Doc.
+
+        Returns the rules that changed the file, or None when nothing changed (the file moved on under us). Raises
+        plan_mark.LockError (lock or write failure) or FileNotFoundError (file gone before the locked re-read).
+        """
+        applied: set[str] = set()
+
+        def rewrite(text: str) -> str | None:
+            fresh = Doc(doc.path, doc.rel, doc.bucket, doc.state, text)
+            kept = len(self.reports)
+            for rule in self.rules:
+                if rule in doc.hit and getattr(self, f"rule_{rule}")(fresh):
+                    fresh.hit.add(rule)
+            del self.reports[kept:]  # reports were collected once in the first pass
+            if not fresh.hit:
+                return None
+            applied.update(fresh.hit)
+            return fresh.text()
+
+        plan_mark.locked_rewrite(doc.path, rewrite)
+        return applied or None
 
     def run(self) -> int:
         self.load()
@@ -488,6 +498,7 @@ class Backfill:
         total = 0
         changed_files = 0
         skipped = 0
+        locked = False
         for doc in self.docs:
             if not doc.hit:
                 continue
@@ -497,15 +508,28 @@ class Backfill:
                     print(f"skipped ({why}) {doc.rel}")
                     skipped += 1
                     continue
+            hit = doc.hit
+            if not self.dry_run:
+                try:
+                    hit = self.write(doc) or set()
+                except plan_mark.LockError as exc:
+                    print(f"skipped (locked) {doc.rel}")
+                    print(f"backfill: {doc.rel}: {exc}", file=sys.stderr)
+                    skipped += 1
+                    locked = True
+                    continue
+                except FileNotFoundError:
+                    print(f"backfill: {doc.rel}: vanished before the locked re-read; skipped", file=sys.stderr)
+                    continue
+                if not hit:
+                    continue
             for rule in self.rules:
-                if rule in doc.hit:
+                if rule in hit:
                     verbs = VERBS[rule]
                     print(f"{'would ' + verbs[0] if self.dry_run else verbs[1]} {doc.rel}")
                     counts[rule] += 1
                     total += 1
             changed_files += 1
-            if not self.dry_run:
-                self.write(doc)
         for rule in self.rules:
             print(f"rule ({rule}) {LABELS[rule]}: {counts[rule]} files")
         print(f"total: {total} changes in {changed_files} files")
@@ -514,4 +538,4 @@ class Backfill:
             print(f"{kind}: {rel} step {step}" + (f": {text}" if text else ""))
         if total == 0 and skipped == 0:
             print("nothing to do")
-        return 0
+        return 6 if locked else 0
