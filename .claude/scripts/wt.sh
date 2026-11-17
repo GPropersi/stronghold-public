@@ -26,6 +26,8 @@
 #
 # Env:
 #   STRONGHOLD_DIR   override the stronghold root (test seam; default: this script's checkout)
+#   WT_FROM          `new` only: cut a new branch at this commit sha instead of origin/<default>
+#                    (make wt-new ... FROM=<sha>; an owned worktree-new target gets from=<sha>)
 #
 # Exit: 0 ok, 1 refused or failed, 2 usage.
 set -euo pipefail
@@ -224,9 +226,18 @@ cmd_new() {
     wt_die "branch $branch sanitizes to \"$slug\", the repo name; pick another branch name"
     return 1
   fi
+  # WT_FROM (make wt-new ... FROM=<sha>) pins a NEW branch at a literal commit instead of
+  # origin/<default>; /split-pr needs this to verify parts at the pinned merge-base.
+  case "${WT_FROM:-}" in
+    "" | [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) ;;
+    *)
+      wt_die "FROM \"${WT_FROM}\" must be a lowercase hex commit sha"
+      return 1
+      ;;
+  esac
   if [ "$OWNED" -eq 1 ]; then
     local owned_rc=0
-    make -C "$REPO_DIR" worktree-new "name=$(_wt_make_value "$slug")" "b=$(_wt_make_value "$branch")" || owned_rc=$?
+    make -C "$REPO_DIR" worktree-new "name=$(_wt_make_value "$slug")" "b=$(_wt_make_value "$branch")" ${WT_FROM:+"from=$WT_FROM"} || owned_rc=$?
     return "$owned_rc"
   fi
   _wt_new_generic "$repo" "$branch" "$slug"
@@ -317,6 +328,12 @@ EOF
     git -C "$REPO_DIR" worktree add "$path" "$branch" || return 1
   elif git -C "$REPO_DIR" show-ref --verify --quiet "refs/remotes/origin/$branch"; then
     git -C "$REPO_DIR" worktree add --track -b "$branch" "$path" "origin/$branch" || return 1
+  elif [ -n "${WT_FROM:-}" ]; then
+    if ! git -C "$REPO_DIR" rev-parse --verify --quiet "${WT_FROM}^{commit}" > /dev/null; then
+      wt_die "FROM $WT_FROM is not a commit in $repo"
+      return 1
+    fi
+    git -C "$REPO_DIR" worktree add --no-track -b "$branch" "$path" "$WT_FROM" || return 1
   else
     base_ref="origin/$default_branch"
     if ! git -C "$REPO_DIR" show-ref --verify --quiet "refs/remotes/$base_ref"; then

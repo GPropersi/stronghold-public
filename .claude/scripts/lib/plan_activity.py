@@ -10,7 +10,9 @@ Exit: 0 ok | 2 usage | 4 unknown repo bucket.
 
 Library: `build_feed(plans_dir)` -> {"events": [...], "history": "ok" | "unavailable", "generated_at": iso}. Git output
 is cached per (resolved root, plans dir name) at the HEAD it was read at; a failed read is negative-cached.
-Events never carry commit subjects, full paths or frontmatter other than `short_title`.
+Events never carry commit subjects, full paths or frontmatter other than `short_title`. The last event field,
+`step_state`, is the CURRENT state of the event's step ("done" iff it has a parseable `**Done:**`, else "open") for
+`step-*` / `subplan-*` events, and None for git events and `implementation-started`.
 """
 
 from __future__ import annotations
@@ -75,6 +77,7 @@ class Event:
     detail: str | None
     sha: str | None
     source: str
+    step_state: str | None = None
 
 
 @dataclass(frozen=True)
@@ -588,8 +591,11 @@ def stamp_events(plans_dir: Path, transitions: dict, infos: list[PlanInfo] | Non
 
         def make(kind, ts, epoch, step, detail, _info=info, _title=title) -> Event:
             state = _state_at(transitions, _info.repo, _info.topic, epoch, _info.state)
+            step_state = None
+            if kind != "implementation-started":
+                step_state = "done" if plan_parse.parse_stamp(step.done_at) is not None else "open"
             return Event(ts, epoch, kind, _info.repo, _info.topic, _info.name, _title, _info.plan_kind, state,
-                         step.n, step.title, detail, None, "stamp")
+                         step.n, step.title, detail, None, "stamp", step_state)
 
         for step in info.doc.steps:
             sub = _subplan_stem(info, step, siblings) if is_rollup else None

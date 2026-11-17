@@ -8,9 +8,9 @@
 (function(){try{var t=localStorage.getItem('plans.theme');if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme',t)}}catch(e){}})();
 </script>
 <style>
-:root{--bg:#f4f6f6;--panel:#fff;--rule:#d5dbdb;--ink:#1f2424;--muted:#566668;--ok:#17702f;--ok-bg:rgba(36,167,69,.12);--open:#a8480a;--hold:#0b6279;--hold-bg:rgba(34,211,238,.14);--defer:#7a5900;--defer-bg:rgba(240,193,90,.14);--danger:#a8222f;--danger-bg:#fdf0f1;--track:#e3e8e8;--radius:8px}
-@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#1a1a1a;--panel:#262626;--rule:#3a3a3a;--ink:#e8e8e8;--muted:#a3a3a3;--ok:#4ade80;--ok-bg:rgba(74,222,128,.12);--open:#fb923c;--hold:#22d3ee;--hold-bg:rgba(34,211,238,.12);--defer:#f0c15a;--defer-bg:rgba(240,193,90,.12);--danger:#f87171;--danger-bg:rgba(248,113,113,.12);--track:#3a3a3a}}
-:root[data-theme=dark]{--bg:#1a1a1a;--panel:#262626;--rule:#3a3a3a;--ink:#e8e8e8;--muted:#a3a3a3;--ok:#4ade80;--ok-bg:rgba(74,222,128,.12);--open:#fb923c;--hold:#22d3ee;--hold-bg:rgba(34,211,238,.12);--defer:#f0c15a;--defer-bg:rgba(240,193,90,.12);--danger:#f87171;--danger-bg:rgba(248,113,113,.12);--track:#3a3a3a}
+:root{--bg:#f4f6f6;--panel:#fff;--rule:#d5dbdb;--ink:#1f2424;--muted:#566668;--ok:#17702f;--ok-bg:rgba(36,167,69,.12);--open:#a8480a;--hold:#0b6279;--hold-bg:rgba(34,211,238,.14);--defer:#7a5900;--defer-bg:rgba(240,193,90,.14);--danger:#a8222f;--danger-bg:#fdf0f1;--track:#e3e8e8;--radius:8px;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#1a1a1a;--panel:#262626;--rule:#3a3a3a;--ink:#e8e8e8;--muted:#a3a3a3;--ok:#4ade80;--ok-bg:rgba(74,222,128,.12);--open:#fb923c;--hold:#22d3ee;--hold-bg:rgba(34,211,238,.12);--defer:#f0c15a;--defer-bg:rgba(240,193,90,.12);--danger:#f87171;--danger-bg:rgba(248,113,113,.12);--track:#3a3a3a;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#1a1a1a;--panel:#262626;--rule:#3a3a3a;--ink:#e8e8e8;--muted:#a3a3a3;--ok:#4ade80;--ok-bg:rgba(74,222,128,.12);--open:#fb923c;--hold:#22d3ee;--hold-bg:rgba(34,211,238,.12);--defer:#f0c15a;--defer-bg:rgba(240,193,90,.12);--danger:#f87171;--danger-bg:rgba(248,113,113,.12);--track:#3a3a3a;color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;overflow-wrap:anywhere}
@@ -25,6 +25,9 @@ button,label.tog{min-height:2.75rem;padding:0 .9rem;border:1px solid var(--rule)
 button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--open);outline-offset:2px}
 label.tog:focus-within{outline:2px solid var(--open);outline-offset:2px}
 label.tog input{width:1.1rem;height:1.1rem;margin:0}
+label.tog input[type=date]{width:auto;height:auto;min-height:2.5rem;font:inherit;color:inherit;background:transparent;border:0;padding:0}
+#rangeg{display:inline-flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+label.tog.on{border-color:var(--hold);box-shadow:inset 0 0 0 1px var(--hold)}
 main{max-width:60rem;margin:0 auto;padding:1rem}
 #live{margin-bottom:.5rem;min-height:1.5rem}
 .banner{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;padding:.5rem .75rem;margin-top:.25rem;border:1px solid var(--danger);border-radius:var(--radius);background:var(--danger-bg);color:var(--danger)}
@@ -144,17 +147,34 @@ button.switch{gap:.6rem}
 .switch[aria-checked="true"] .sw-thumb{transform:translateX(1.25rem)}
 #drawer button.switch{justify-content:space-between}
 @media (prefers-reduced-motion:reduce){.switch .sw-track,.switch .sw-thumb{transition:none}}
+#ftog{display:none}
+#ftog svg{display:block;flex:none}
+#ftog[aria-expanded="true"] svg{transform:rotate(180deg)}
+#ftog .badge{min-width:1.25rem;padding:0 .35rem;border-radius:999px;background:var(--hold);color:var(--bg);font-size:.75rem;font-weight:700;line-height:1.25rem;text-align:center}
+#drawer .drow{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+#drawer button.done{min-height:2.75rem;font-weight:600}
+#drawer button.dtoggle{width:100%;justify-content:space-between;border:0;background:transparent;text-align:left}
+#drawer button.dtoggle::after{content:"";flex:none;width:.5rem;height:.5rem;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);margin-right:.25rem}
+#drawer button.dtoggle[aria-expanded="true"]::after{transform:rotate(-135deg)}
+#drawer label.tog{display:flex;width:100%;min-height:2.75rem;margin:.25rem 0}
+#drawer label.tog input[type=date]{flex:1;min-width:0;min-height:2.5rem}
+#drawer .note{margin:.25rem 0}
 @media (min-width:641px){#drawer{display:none!important}}
 @media (max-width:640px){
-header{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.375rem .5rem;padding:.5rem .75rem}
+header{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:.375rem .5rem;padding:.5rem .75rem}
+#ftog{display:inline-flex;grid-row:1;grid-column:3;gap:.4rem}
+body.fcollapsed #pillbar,body.fcollapsed #chips{display:none}
 #menu{display:inline-flex}
 h1{grid-row:1;grid-column:2;margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ctl{display:contents}
-#viewlab,#repolab,#kindlab,#th,#updated,#refresh .lbl{display:none}
-#refresh{grid-row:1;grid-column:3;padding:0;width:2.75rem;justify-content:center}
+#viewlab,#repolab,#kindlab,#planslab,#stepslab,#rangeg,#th,#updated,#refresh .lbl{display:none}
+#refresh{grid-row:1;grid-column:4;padding:0;width:2.75rem;justify-content:center}
 #statuslab{display:none}
-#pillbar{display:flex;grid-column:1/-1;gap:.5rem;overflow-x:auto;scrollbar-width:none;padding:.125rem 0 .25rem}
+#pillbar{display:flex;grid-column:1/-1;gap:.5rem;overflow-x:auto;scrollbar-width:none;padding:.125rem 0 .25rem;scroll-padding-inline:1.25rem}
 #pillbar::-webkit-scrollbar{display:none}
+#pillbar.fade-r{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 1.25rem),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 1.25rem),transparent)}
+#pillbar.fade-l{-webkit-mask-image:linear-gradient(to right,transparent,#000 1.25rem);mask-image:linear-gradient(to right,transparent,#000 1.25rem)}
+#pillbar.fade-l.fade-r{-webkit-mask-image:linear-gradient(to right,transparent,#000 1.25rem,#000 calc(100% - 1.25rem),transparent);mask-image:linear-gradient(to right,transparent,#000 1.25rem,#000 calc(100% - 1.25rem),transparent)}
 main{padding:.5rem .75rem}
 .card{padding:.25rem .75rem .75rem}
 #activity li.ev{grid-template-columns:2.75rem 1fr;padding:.6rem .75rem;gap:.15rem .5rem}
@@ -166,10 +186,17 @@ main{padding:.5rem .75rem}
 <header>
   <button id="menu" class="icon" type="button" aria-label="Menu" aria-expanded="false" aria-controls="drawer"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
   <h1 id="ttl">Plans</h1>
+  <button id="ftog" type="button" aria-expanded="true" aria-controls="pillbar" hidden><span>Filters</span><span id="fbadge" class="badge" hidden></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
   <div class="ctl">
     <label class="tog filt" id="viewlab"><span class="k">View</span> <select id="view"><option value="plans">Plans</option><option value="activity">Activity</option></select><span class="caret" aria-hidden="true"></span></label>
     <label class="tog" id="repolab"><span class="k">Repo</span> <select id="repo"><option value="">All repos</option></select></label>
     <label class="tog" id="kindlab"><span class="k">Type</span> <select id="kind"><option value="">All types</option><option value="master">Master</option><option value="plan">Plan</option></select></label>
+    <label class="tog filt" id="planslab" hidden><span class="k">Plans</span> <select id="fplans" aria-describedby="planshelp" title="Events from plans that were open when the event happened. Without git history this means plans open now."><option value="all">All plans</option><option value="open">Open at the time</option></select><span class="caret" aria-hidden="true"></span></label>
+    <label class="tog filt" id="stepslab" hidden><span class="k">Steps</span> <select id="fstep"><option value="all">All steps</option><option value="open">Steps open now</option><option value="done">Steps done now</option></select><span class="caret" aria-hidden="true"></span></label>
+    <span id="rangeg" role="group" aria-label="Date range" hidden>
+      <label class="tog" id="fromlab"><span class="k">From</span> <input type="date" id="from" autocomplete="off"></label>
+      <label class="tog" id="tolab"><span class="k">To</span> <input type="date" id="to" autocomplete="off"></label>
+    </span>
     <label class="tog filt" id="statuslab"><span class="k">Show</span> <select id="status">
       <option value="all">All plans</option>
       <option value="open">Open</option>
@@ -181,17 +208,29 @@ main{padding:.5rem .75rem}
     <span id="updated" class="muted mono"></span>
     <button id="th" class="switch" type="button" role="switch" aria-checked="false"><span class="k">Dark mode</span><span class="sw-track"><span class="sw-thumb"></span></span></button>
   </div>
+  <span id="planshelp" class="sr">Events from plans that were open when the event happened</span>
   <div id="pillbar" role="group" aria-label="Filters"></div>
   <nav id="drawer" aria-label="Repos and settings" hidden>
-    <div class="dhead">View</div>
-    <div id="dviews"></div>
+    <div class="drow"><div class="dhead">Menu</div><button id="ddone" class="done" type="button">Done</button></div>
+    <button id="tview" class="dtoggle" type="button" aria-expanded="false" aria-controls="dviews"></button>
+    <div id="dviews" hidden></div>
     <div class="dsep"></div>
-    <div class="dhead">Repo</div>
-    <div id="drepos"></div>
+    <button id="trepo" class="dtoggle" type="button" aria-expanded="false" aria-controls="drepos"></button>
+    <div id="drepos" hidden></div>
     <div class="dsep"></div>
     <div class="dhead">Type</div>
     <div id="dkinds"></div>
     <div class="dsep"></div>
+    <div id="drange">
+      <button id="tdate" class="dtoggle" type="button" aria-expanded="true" aria-controls="dbody"></button>
+      <div id="dbody" role="group" aria-label="Date range">
+        <label class="tog" id="dfromlab"><span class="k">From</span> <input type="date" id="dfrom" autocomplete="off"></label>
+        <label class="tog" id="dtolab"><span class="k">To</span> <input type="date" id="dto" autocomplete="off"></label>
+        <p id="dconflict" class="note" hidden>From is after To, so no events match.</p>
+        <button id="dclear" class="item" type="button">Clear dates</button>
+      </div>
+      <div class="dsep"></div>
+    </div>
     <button id="th2" class="item switch" type="button" role="switch" aria-checked="false"><span>Dark mode</span><span class="sw-track"><span class="sw-thumb"></span></span></button>
     <p id="updated2" class="muted mono dmeta"></p>
   </nav>
@@ -201,7 +240,9 @@ main{padding:.5rem .75rem}
     <div class="countrow"><span id="counts"></span><span id="flightn" class="mono"></span></div>
     <div id="chips"></div>
     <div id="banner" class="banner" hidden><span id="bmsg"></span><button id="retry" type="button">Retry</button></div>
+    <div id="planshint" class="note" hidden></div>
     <div id="note" class="note" hidden>Git history is unavailable, so only step start and finish times are shown.</div>
+    <div id="rangenote" class="note" hidden>From is after To, so no events match.</div>
   </div>
   <div id="list"></div>
   <div id="activity" hidden></div>
@@ -275,6 +316,24 @@ paintTheme();
 /* ---------- state ---------- */
 var statusFilter=STATUSES.indexOf(store(ST_KEY))>=0?store(ST_KEY):'all';
 var repoFilter=store(RP_KEY)||'';
+/* Activity-only filters: separate keys, never plans.status (that one drives the Plans refetch). */
+var PLANS_KEY='plans.act.plans',STEP_KEY='plans.act.step',FROM_KEY='plans.act.from',TO_KEY='plans.act.to',DATE_DEBOUNCE=400;
+function validDate(s){
+  if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(s)){return ''}
+  var y=+s.slice(0,4),m=+s.slice(5,7),d=+s.slice(8,10),t=new Date(y,m-1,d);
+  return t.getFullYear()===y&&t.getMonth()===m-1&&t.getDate()===d?s:'';
+}
+var plansFilter=store(PLANS_KEY)==='open'?'open':'all';
+var stepFilter=store(STEP_KEY)==='open'||store(STEP_KEY)==='done'?store(STEP_KEY):'all';
+var fromFilter=validDate(store(FROM_KEY)),toFilter=validDate(store(TO_KEY));
+var hintEl=$('planshint'),rangeNoteEl=$('rangenote');
+/* Phone filter bar: collapsed state persists, anything but "collapsed" loads as open (fail closed to showing the filters). */
+var BAR_KEY='plans.act.bar';
+var barCollapsed=store(BAR_KEY)==='collapsed';
+var ftogEl=$('ftog'),fbadgeEl=$('fbadge'),pillbarEl=$('pillbar');
+var dfromEl=$('dfrom'),dtoEl=$('dto'),dconflictEl=$('dconflict');
+$('from').value=fromFilter;$('to').value=toFilter;dfromEl.value=fromFilter;dtoEl.value=toFilter;
+var fromTimer=null,toTimer=null,fromPending='',toPending='';
 statusEl.value=statusFilter;
 var STATUS_LABELS=[['all','All'],['open','Open'],['started','Started'],['notstarted','Not started'],['completed','Completed']];
 var KIND_LABELS=[['master','Master'],['plan','Plan']];
@@ -297,11 +356,28 @@ function paintPillbar(){
   if(view==='plans'){
     STATUS_LABELS.forEach(function(it){kids.push(fpill('status:'+it[0],it[1],statusFilter===it[0],function(){setStatus(it[0])}))});
     kids.push(sepEl());
+  }else{
+    var pp=fpill('plans:open','Plans open at the time',plansFilter==='open',function(){setActPlans(plansFilter==='open'?'all':'open')});
+    pp.setAttribute('aria-describedby','planshelp');
+    pp.title=$('planshelp').textContent;
+    kids.push(pp);
+    kids.push(fpill('step:open','Steps open now',stepFilter==='open',function(){setActStep(stepFilter==='open'?'all':'open')}));
+    kids.push(fpill('step:done','Steps done now',stepFilter==='done',function(){setActStep(stepFilter==='done'?'all':'done')}));
+    kids.push(sepEl());
   }
   KIND_LABELS.forEach(function(it){kids.push(fpill('kind:'+it[0],it[1],kindFilter===it[0],function(){setKind(kindFilter===it[0]?'':it[0])}))});
   bar.replaceChildren.apply(bar,kids);
   if(fid){var f=bar.querySelector('[data-pid="'+fid+'"]');if(f){f.focus()}}
+  paintFade();
 }
+/* Scroll cue for the horizontally scrolling pill row: edge fades only on the side that has more pills. */
+function paintFade(){
+  var b=pillbarEl,max=b.scrollWidth-b.clientWidth,sl=b.scrollLeft;
+  b.classList.toggle('fade-l',max>1&&sl>1);
+  b.classList.toggle('fade-r',max>1&&sl<max-1);
+}
+pillbarEl.addEventListener('scroll',paintFade);
+window.addEventListener('resize',paintFade);
 function paintFilter(){$('statuslab').classList.toggle('on',statusFilter!=='all');paintPillbar()}
 paintFilter();
 var stepOpen=new Set();
@@ -337,23 +413,80 @@ function setRepo(v){
   paintKindUi();syncRepoOptions();
   applyView();
 }
+function setActPlans(v){
+  plansFilter=v==='open'?'open':'all';save(PLANS_KEY,plansFilter);$('fplans').value=plansFilter;
+  paintKindUi();applyView();
+}
+function setActStep(v){
+  stepFilter=v==='open'||v==='done'?v:'all';save(STEP_KEY,stepFilter);$('fstep').value=stepFilter;
+  paintKindUi();applyView();
+}
+/* Writes the applied value only into an input that differs from both it and the raw value received, so the field being edited is never rewritten. */
+function writeDate(id,applied,raw){
+  var n=$(id);
+  if(n.value!==applied&&n.value!==raw){n.value=applied}
+}
+function setFrom(v){
+  fromFilter=validDate(v);save(FROM_KEY,fromFilter);writeDate('from',fromFilter,v);writeDate('dfrom',fromFilter,v);
+  paintKindUi();applyView();
+}
+function setTo(v){
+  toFilter=validDate(v);save(TO_KEY,toFilter);writeDate('to',toFilter,v);writeDate('dto',toFilter,v);
+  paintKindUi();applyView();
+}
+function clearDateTimer(key){
+  if(key==='from'){if(fromTimer!==null){clearTimeout(fromTimer);fromTimer=null}}
+  else if(toTimer!==null){clearTimeout(toTimer);toTimer=null}
+}
+function scheduleDate(key,v){
+  clearDateTimer(key);
+  if(key==='from'){fromPending=v;fromTimer=setTimeout(function(){fromTimer=null;setFrom(fromPending)},DATE_DEBOUNCE)}
+  else{toPending=v;toTimer=setTimeout(function(){toTimer=null;setTo(toPending)},DATE_DEBOUNCE)}
+}
+function flushDates(){
+  if(fromTimer!==null){clearDateTimer('from');setFrom(fromPending)}
+  if(toTimer!==null){clearDateTimer('to');setTo(toPending)}
+}
 function viewLoader(v){return v==='activity'?loadActivity:loadList}
 /* Switching views paints the destination from its cache and fetches only when it never loaded or last failed. */
 function setView(v,fromDrawer){
   v=v==='activity'?'activity':'plans';
+  flushDates();
   view=v;save(VIEW_KEY,v);
   paintView();
   if(fromDrawer){setDrawer(false,true)}
   var s=viewState[v];
   if((!s.ok||s.err)&&!s.pending){viewLoader(v)('switch')}
 }
+/* Filters toggle (phone, Activity only). Focus leaves a pill or chip that is about to be hidden before the bar is
+   rebuilt or hidden, so it lands on #ftog instead of dropping to body. */
+function paintBar(){
+  var act=view==='activity',coll=act&&barCollapsed;
+  ftogEl.hidden=!act;
+  ftogEl.setAttribute('aria-expanded',barCollapsed?'false':'true');
+  if(coll&&!wide()){
+    var ae=document.activeElement;
+    if(ae&&(pillbarEl.contains(ae)||chipsEl.contains(ae))){ftogEl.focus()}
+  }
+  document.body.classList.toggle('fcollapsed',coll);
+  paintFade();
+}
+ftogEl.addEventListener('click',function(){
+  barCollapsed=!barCollapsed;save(BAR_KEY,barCollapsed?'collapsed':'open');
+  paintBar();
+  ftogEl.focus();
+});
 function paintView(){
   var act=view==='activity';
   viewEl.value=view;$('viewlab').classList.toggle('on',act);
   $('statuslab').hidden=act;
+  $('planslab').hidden=!act;$('stepslab').hidden=!act;$('rangeg').hidden=!act;
   listEl.hidden=act;activityEl.hidden=!act;
   $('flightn').hidden=act;
+  paintBar();
+  $('drange').hidden=!act;
   noteEl.hidden=true;
+  if(!act){hintEl.hidden=true;rangeNoteEl.hidden=true;$('from').removeAttribute('aria-describedby');$('to').removeAttribute('aria-describedby')}
   syncRepoOptions();
   paintKindUi();
   paintStamp();
@@ -382,10 +515,49 @@ function chipNodes(){
     r.addEventListener('click',function(){setRepo('');focusOwner(repoEl)});
     kids.push(r);
   }
+  if(view==='activity'){
+    var add=function(text,label,clear,owner){
+      var b=el('button','chip',text+' ×');
+      b.type='button';
+      b.setAttribute('aria-label','Clear '+label);
+      b.addEventListener('click',function(){clear();focusOwner(owner)});
+      kids.push(b);
+    };
+    if(plansFilter==='open'){add('Plans: open at the time','plans filter: open at the time',function(){setActPlans('all')},$('fplans'))}
+    if(stepFilter!=='all'){add('Steps: '+stepFilter+' now','steps filter: '+stepFilter+' now',function(){setActStep('all')},$('fstep'))}
+    if(fromFilter){add('From: '+fromFilter,'from filter: '+fromFilter,function(){clearDateTimer('from');setFrom('')},$('from'))}
+    if(toFilter){add('To: '+toFilter,'to filter: '+toFilter,function(){clearDateTimer('to');setTo('')},$('to'))}
+  }
   return kids;
 }
+/* In-place updates (never rebuilds the static drawer date inputs or collapses a section): filter badge, drawer
+   section summaries and the From-after-To line. */
+function paintDrawerFilters(){
+  var n=(repoFilter?1:0)+(kindFilter?1:0)+(plansFilter!=='all'?1:0)+(stepFilter!=='all'?1:0)+(fromFilter||toFilter?1:0);
+  fbadgeEl.hidden=n===0;
+  if(fbadgeEl.textContent!==String(n)){fbadgeEl.textContent=String(n)}
+  var lab=n?'Filters, '+n+' active':'Filters';
+  if(ftogEl.getAttribute('aria-label')!==lab){ftogEl.setAttribute('aria-label',lab)}
+  var bad=!!(fromFilter&&toFilter&&fromFilter>toFilter);
+  if(dconflictEl.hidden===bad){dconflictEl.hidden=!bad}
+  [dfromEl,dtoEl].forEach(function(i){
+    if(bad){if(i.getAttribute('aria-describedby')!=='dconflict'){i.setAttribute('aria-describedby','dconflict')}}
+    else if(i.hasAttribute('aria-describedby')){i.removeAttribute('aria-describedby')}
+  });
+  var range=fromFilter&&toFilter?fromFilter+' – '+toFilter:fromFilter?'from '+fromFilter:toFilter?'until '+toFilter:'Any date';
+  setText($('tview'),'View · '+(view==='activity'?'Activity':'Plans'));
+  setText($('trepo'),'Repo · '+(repoFilter||'All repos'));
+  setText($('tdate'),'Date range · '+range+(bad?' (From is after To)':''));
+}
+function setText(n,t){if(n.textContent!==t){n.textContent=t}}
 function paintKindUi(){
-  var key=view+'|'+kindFilter+'|'+repoFilter;
+  $('fplans').value=plansFilter;$('fstep').value=stepFilter;
+  $('planslab').classList.toggle('on',plansFilter!=='all');
+  $('stepslab').classList.toggle('on',stepFilter!=='all');
+  $('fromlab').classList.toggle('on',!!fromFilter);
+  $('tolab').classList.toggle('on',!!toFilter);
+  paintDrawerFilters();
+  var key=view+'|'+kindFilter+'|'+repoFilter+'|'+plansFilter+'|'+stepFilter+'|'+fromFilter+'|'+toFilter;
   if(chipsKey!==key){
     chipsKey=key;paintPillbar();
     chipsEl.replaceChildren.apply(chipsEl,chipNodes());
@@ -871,19 +1043,37 @@ function syncRepoOptions(){
 }
 var drawerKey='',drepos=$('drepos'),drawerEl=$('drawer'),menuBtn=$('menu');
 function setDrawer(open,focusBack){
+  var wasOpen=!drawerEl.hidden;
+  /* A pending debounced date is applied before the drawer closes; a closed drawer (desktop setKind/chooseRepo) never flushes. */
+  if(!open&&wasOpen){flushDates()}
   drawerEl.hidden=!open;
   menuBtn.setAttribute('aria-expanded',open?'true':'false');
-  if(open){
-    var cur=drepos.querySelector('[aria-current="true"]')||drepos.firstElementChild;
-    if(cur){cur.focus()}
-  }else if(focusBack){menuBtn.focus()}
+  if(open){$('ddone').focus()}
+  else if(focusBack){menuBtn.focus()}
 }
+Array.prototype.forEach.call(drawerEl.querySelectorAll('button.dtoggle'),function(b){
+  b.addEventListener('click',function(){
+    var open=b.getAttribute('aria-expanded')!=='true';
+    b.setAttribute('aria-expanded',open?'true':'false');
+    $(b.getAttribute('aria-controls')).hidden=!open;
+  });
+});
+$('ddone').addEventListener('click',function(){setDrawer(false,true)});
+dfromEl.addEventListener('change',function(){scheduleDate('from',this.value)});
+dtoEl.addEventListener('change',function(){scheduleDate('to',this.value)});
+$('dclear').addEventListener('click',function(){
+  clearDateTimer('from');clearDateTimer('to');
+  setFrom('');setTo('');
+  dfromEl.focus();
+});
 function chooseRepo(v){
   setRepo(v);
   setDrawer(false,true);
 }
-menuBtn.addEventListener('click',function(){setDrawer(drawerEl.hidden,false)});
-document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!drawerEl.hidden){setDrawer(false,true)}});
+menuBtn.addEventListener('click',function(){var o=drawerEl.hidden;setDrawer(o,!o)});
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'&&!drawerEl.hidden&&!e.defaultPrevented&&!(e.target.matches&&e.target.matches('input[type=date]'))){setDrawer(false,true)}
+});
 document.addEventListener('click',function(e){
   if(!drawerEl.hidden&&!drawerEl.contains(e.target)&&!menuBtn.contains(e.target)){setDrawer(false,false)}
 });
@@ -1106,9 +1296,31 @@ function dayLabel(ev){
 function plural(n,w){return n+' '+w+(n===1?'':'s')}
 function matchEvent(ev){
   if(repoFilter&&ev.repo!==repoFilter){return false}
-  if(!kindFilter){return true}
-  if(kindFilter==='master'){return ev.plan_kind==='master'||ev.plan_kind==='orchestrator'}
-  return ev.plan_kind===kindFilter;
+  if(kindFilter==='master'){if(ev.plan_kind!=='master'&&ev.plan_kind!=='orchestrator'){return false}}
+  else if(kindFilter&&ev.plan_kind!==kindFilter){return false}
+  if(plansFilter==='open'&&ev.state!=='open'){return false}
+  if(stepFilter!=='all'&&ev.step_state!==stepFilter){return false}
+  if(fromFilter||toFilter){
+    if(fromFilter&&toFilter&&fromFilter>toFilter){return false}
+    var k=dayKey(ev);
+    if(isNaN(evEpoch(ev))){return false}
+    if(fromFilter&&k<fromFilter){return false}
+    if(toFilter&&k>toFilter){return false}
+  }
+  return true;
+}
+/* #rangenote and #planshint are rewritten only when their text or visibility changes, so an unchanged note never touches the #live region. */
+function paintActNotes(hasEvents){
+  var bad=!!(hasEvents&&fromFilter&&toFilter&&fromFilter>toFilter);
+  if(rangeNoteEl.hidden===bad){rangeNoteEl.hidden=!bad}
+  ['from','to'].forEach(function(id){
+    var n=$(id);
+    if(bad){if(n.getAttribute('aria-describedby')!=='rangenote'){n.setAttribute('aria-describedby','rangenote')}}
+    else if(n.hasAttribute('aria-describedby')){n.removeAttribute('aria-describedby')}
+  });
+  var want=hasEvents&&plansFilter==='open'?(actHistory==='unavailable'?'Git history is unavailable, so this shows plans that are open now.':'Showing events from plans that were open when each event happened.'):'';
+  if(want&&hintEl.textContent!==want){hintEl.textContent=want}
+  if(hintEl.hidden===!!want){hintEl.hidden=!want}
 }
 function evMarker(ev){
   if(ev.kind==='completed'){return ['now completed',true]}
@@ -1159,6 +1371,7 @@ function renderActivity(opts){
   opts=opts||{};
   var fk=actFocusKey(),sy=window.scrollY,nodes=[],text='',filteredEmpty=false,events=activityData;
   noteEl.hidden=!(events&&actHistory==='unavailable');
+  paintActNotes(!!(events&&events.length));
   if(!events){
     if(viewState.activity.pending){nodes.push(actLoadingEl)}
   }else if(!events.length){
@@ -1170,6 +1383,7 @@ function renderActivity(opts){
       filteredEmpty=true;
       var box=el('div');
       box.appendChild(el('p','empty','No activity matches this filter.'));
+      if(stepFilter!=='all'){box.appendChild(el('p','muted','Step filters only show events about a step; git and plan-level events are hidden.'))}
       chipNodes().forEach(function(c){box.appendChild(c)});
       nodes.push(box);
       text='0 of '+events.length+' events';
@@ -1202,7 +1416,7 @@ function renderActivity(opts){
         more.addEventListener('click',function(){actShown=n+ACT_PAGE;renderActivity({focusDay:firstNew})});
         nodes.push(more);
         text='Showing '+n+' of '+plural(list.length,'event')+' · '+plural(days.length,'day');
-      }else if(repoFilter||kindFilter){
+      }else if(repoFilter||kindFilter||plansFilter!=='all'||stepFilter!=='all'||fromFilter||toFilter){
         text=list.length+' of '+plural(events.length,'event');
       }else{
         text=plural(list.length,'event')+' · '+plural(days.length,'day');
@@ -1273,6 +1487,10 @@ statusEl.addEventListener('change',function(){
   loadList('toggle');
 });
 repoEl.addEventListener('change',function(){setRepo(repoEl.value)});
+$('fplans').addEventListener('change',function(){setActPlans(this.value)});
+$('fstep').addEventListener('change',function(){setActStep(this.value)});
+$('from').addEventListener('change',function(){scheduleDate('from',this.value)});
+$('to').addEventListener('change',function(){scheduleDate('to',this.value)});
 viewEl.addEventListener('change',function(){setView(viewEl.value)});
 refreshBtn.addEventListener('click',function(){viewLoader(view)('refresh')});
 retryBtn.addEventListener('click',function(){viewLoader(view)('retry')});
